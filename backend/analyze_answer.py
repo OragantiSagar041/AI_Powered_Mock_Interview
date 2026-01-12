@@ -35,32 +35,35 @@ Question: "{question}"
 Candidate's Answer: "{answer}"
 
 Instructions:
-1. **Analyze with Context**: Use the provided Resume/Job Description context to evaluate if the answer is factual and relevant to *this specific candidate*.
-2. **Corrected Answer**: Rewrite the candidate's answer to be clearer, more professional, and concise. 
-   - If the candidate's answer is mostly correct, polish it to make it sound like a top-tier candidate's response while keeping their core ideas.
-   - If the candidate's answer is incorrect or vague, provide a model answer that directly addresses the question.
-   - The corrected answer should be "clear" and "according to the user answer" where possible (filling in gaps), or "according to the question" if the user missed the mark completely.
+1. **Analyze strictly based on the 'Candidate's Answer'**: Do NOT score based on the candidate's potential or resume. Score ONLY what they actually said.
+   - If the answer is "hello", "I don't know", or very short/irrelevant, the score MUST be low (0-30).
+   - Only give high scores for complete, relevant answers that address the question.
 
-3. **Feedback**: Provide "genuine" and constructive feedback.
-   - Avoid generic phrases like "Good job."
-   - Specifically mention what they did well (e.g., "You correctly identified X...").
-   - valid criticisms (e.g., "You missed the concept of Y..." or "Your delivery was a bit rambling...").
-   - Offer actionable advice on how to improve.
+2. **Corrected Answer**:
+   - If the candidate's answer is good, polish it.
+   - If the candidate's answer is poor or missing (e.g. just "hello"), generate a **FULL MODEL ANSWER** based on their Resume/Context.
+   - Start the corrected answer with "Suggested Answer:" if you are providing a model answer because theirs was poor.
 
-4. **Scoring**: Rate the answer on a scale of 0-100.
+3. **Feedback**:
+   - Be honest. If they just said "hello", tell them they need to actually answer the question.
+   - Critique the content, delivery (implied by text), and structure.
 
-5. **Keywords**: Extract 2-3 key technical concepts mentioned (or missing).
+4. **Scoring**: Rate the **Candidate's Answer** on a scale of 0-100. 
+   - CRITICAL: If the candidate's answer is short (e.g. "hello") or irrelevant, the score MUST be < 30. 
+   - Do NOT score your own "Suggested Answer".
+
+5. **Keywords**: Extract key concepts from the *Suggested Answer* if the user's answer was poor.
 
 Return VALID JSON ONLY.
 
 Format:
 {{
-  "corrected_answer": "Your improved or model answer here...",
+  "corrected_answer": "Suggested Answer: ...",
   "grammar_score": 0,
   "relevance_score": 0,
   "clarity_score": 0,
   "overall_score": 0,
-  "feedback": "Your genuine, specific feedback here...",
+  "feedback": "Feedback...",
   "keywords": ["key1", "key2"]
 }}
 """
@@ -98,7 +101,16 @@ Format:
         if start == -1 or end == 0:
              raise Exception("No JSON found")
 
-        return json.loads(content[start:end])
+        result = json.loads(content[start:end])
+
+        # Safety Check: If answer is too short (< 5 words) and score is high, force it down.
+        # This prevents the AI from scoring its own "Suggested Answer".
+        if len(answer.split()) < 5 and result.get("overall_score", 0) > 40:
+            result["overall_score"] = 10
+            if "too short" not in result.get("feedback", "").lower():
+                 result["feedback"] = "Your answer was too short. " + result.get("feedback", "")
+        
+        return result
 
     except Exception as e:
         print(f"⚠️ Analysis API Failed: {e}")

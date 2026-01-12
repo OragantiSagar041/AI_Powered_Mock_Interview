@@ -46,6 +46,7 @@ def add_column_if_not_exists(table, column, datatype):
 add_column_if_not_exists("answers", "ai_score", "INTEGER")
 add_column_if_not_exists("answers", "ai_feedback", "TEXT")
 add_column_if_not_exists("answers", "ai_keywords", "TEXT")
+add_column_if_not_exists("answers", "corrected_answer", "TEXT")
 add_column_if_not_exists("interviews", "recording_path", "TEXT")
 add_column_if_not_exists("interviews", "profile_text", "TEXT")
 add_column_if_not_exists("interviews", "questions", "TEXT") # JSON string

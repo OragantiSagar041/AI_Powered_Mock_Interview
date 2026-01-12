@@ -56,11 +56,15 @@ app.add_middleware(
 # In-memory storage (replace with database in production)
 interviews = {}
 
-# Initialize OpenAI client
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY")  # Use environment variable
-)
+def get_client():
+    load_dotenv()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("⚠️ Warning: OPENROUTER_API_KEY not found in environment")
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key
+    )
 
 def get_or_create_candidate(name: str) -> int:
     cursor.execute("SELECT id FROM candidates WHERE name = ?", (name,))
@@ -116,7 +120,7 @@ def analyze_resume_or_jd(text: str):
     """
 
     try:
-        response = client.chat.completions.create(
+        response = get_client().chat.completions.create(
             model="google/gemini-2.0-flash-001", # OpenRouter model ID
             messages=[{"role": "user", "content": prompt}]
         )
@@ -390,7 +394,7 @@ def generate_jd_questions(jd_text: str) -> List[Dict[str, str]]:
     """
 
     try:
-        response = client.chat.completions.create(
+        response = get_client().chat.completions.create(
             model="openai/gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -492,7 +496,7 @@ Return STRICT JSON only:
 }}
 """
 
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model="openai/gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}]
     )
@@ -533,7 +537,7 @@ def generate_followup_question(answer_text: str, resume_context: str, current_q_
     """
     
     try:
-        response = client.chat.completions.create(
+        response = get_client().chat.completions.create(
             model="openai/gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -623,7 +627,7 @@ async def upload_resume(
         profile_analysis = analyze_resume_or_jd(content_str)
 
         # Generate questions
-        questions = generate_resume_questions(content_str)
+        questions = generate_mock_questions(content_str, source)
 
         if not questions:
             raise HTTPException(status_code=400, detail="Failed to generate questions")
@@ -941,19 +945,45 @@ def interview_ai_summary(interview_id: str):
 
 class AnalyzeRequest(BaseModel):
     interview_id: Optional[str] = None
+    question_id: Optional[int] = None
     question: str
     answer: str
 
 @app.post("/analyze-answer")
 def analyze(req: AnalyzeRequest):
     context = ""
-    # Retrieve Resume/JD context if interview_id is provided
+    # Retrieve Resume/JD context from the CURRENT in-memory session (not historical DB data)
     if req.interview_id and req.interview_id in interviews:
          profile_text = interviews[req.interview_id].get("profile_text", "")
          source = interviews[req.interview_id].get("source", "Resume")
          context = f"Candidate's {source}: {profile_text}"
     
-    return analyze_answer(req.question, req.answer, context)
+    result = analyze_answer(req.question, req.answer, context)
+
+    # Store in DB
+    try:
+        cursor.execute("""
+            INSERT INTO answers (
+                interview_id, question_id, question_text, answer_text, 
+                ai_score, ai_feedback, ai_keywords, corrected_answer, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            req.interview_id,
+            req.question_id,
+            req.question,
+            req.answer,
+            result.get("overall_score", 0),
+            result.get("feedback", ""),
+            json.dumps(result.get("keywords", [])),
+            result.get("corrected_answer", ""),
+            datetime.now().isoformat()
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ Failed to save answer to DB: {e}")
+
+    return result
 
 @app.post("/upload-full-recording")
 async def upload_full_recording(

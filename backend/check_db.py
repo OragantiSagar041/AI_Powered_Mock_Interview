@@ -9,7 +9,8 @@ SELECT
     question_id,
     ai_score,
     ai_feedback,
-    ai_keywords
+    ai_keywords,
+    corrected_answer
 FROM answers
 """)
 
@@ -25,4 +26,5 @@ else:
         print("AI Score:", row[2])
         print("Feedback:", row[3])
         print("Keywords:", row[4])
+        print("Corrected Answer:", row[5])
         print("-" * 30)

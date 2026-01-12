@@ -251,6 +251,9 @@
             color: #166534;
         }
     </style>
+    <!-- Face Detection Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
 </head>
 
 <body>
@@ -319,8 +322,13 @@
                     </div>
                 </div>
 
-                <div class="question-display">
-                    <p id="questionText">Loading question...</p>
+                <div class="question-display" style="display: flex; gap: 10px; align-items: flex-start;">
+                    <p id="questionText" style="flex: 1; margin: 0;">Loading question...</p>
+                    <button onclick="speakText(document.getElementById('questionText').innerText)" class="btn"
+                        style="background:none; border: 1px solid #ccc; color: #333; padding: 5px 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+                        title="Read Question Aloud">
+                        🔊
+                    </button>
                 </div>
 
                 <div style="margin-top: 2rem;">
@@ -342,83 +350,83 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Right Column: Recording & Interaction -->
-        <div class="card">
-            <h3>📹 Your Response</h3>
+            <!-- Right Column: Recording & Interaction -->
+            <div class="card">
+                <h3>📹 Your Response</h3>
 
-            <div class="video-container"
-                style="background: #000; position: relative; display: flex; align-items: center; justify-content: center;">
-                <video id="videoPreview" autoplay muted playsinline
-                    style="width: 100%; height: 100%; object-fit: cover; z-index: 1;"></video>
-                <button id="cameraFallbackBtn" onclick="startCameraManual()" class="btn btn-primary"
-                    style="position: absolute; z-index: 2; display: none;">
-                    📸 Enable Camera
-                </button>
-                <div id="cameraLoading" style="position: absolute; color: white; z-index: 0;">Waiting for camera...
+                <div class="video-container"
+                    style="background: #000; position: relative; display: flex; align-items: center; justify-content: center;">
+                    <video id="videoPreview" autoplay muted playsinline
+                        style="width: 100%; height: 100%; object-fit: cover; z-index: 1;"></video>
+                    <button id="cameraFallbackBtn" onclick="startCameraManual()" class="btn btn-primary"
+                        style="position: absolute; z-index: 2; display: none;">
+                        📸 Enable Camera
+                    </button>
+                    <div id="cameraLoading" style="position: absolute; color: white; z-index: 0;">Waiting for camera...
+                    </div>
+
+                    <!-- Face Detection Warning Overlay -->
+                    <div id="faceWarning"
+                        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: #ef4444; display: none; align-items: center; justify-content: center; z-index: 10; font-size: 1.5rem; font-weight: bold; flex-direction: column; text-align: center; padding: 20px;">
+                        <span style="font-size: 4rem; margin-bottom: 10px;">⚠️</span>
+                        <div>YOUR FACE IS NOT VISIBLE</div>
+                        <div style="font-size: 1rem; color: #ccc; margin-top: 5px; font-weight: normal;">Please adjust
+                            your camera</div>
+                    </div>
+
+                </div>
+
+                <div class="controls">
+                    <button id="startButton" class="btn btn-primary" title="Start Recording">
+                        ● Record
+                    </button>
+                    <button id="stopButton" class="btn btn-danger" disabled title="Stop Recording">
+                        ⏹ Stop
+                    </button>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button onclick="analyzeAnswer()" class="btn"
+                        style="background: var(--text-main); color: white; flex: 1;">
+                        ✨ Analyze Answer
+                    </button>
+                    <button id="skipButton" class="btn btn-skip">Skip</button>
+                    <button id="nextButton" class="btn" disabled
+                        style="background: var(--success-color); color: white; flex: 1;">
+                        Next ➡
+                    </button>
                 </div>
             </div>
 
-            <div class="controls">
-                <button id="startButton" class="btn btn-primary" title="Start Recording">
-                    ● Record
-                </button>
-                <button id="stopButton" class="btn btn-danger" disabled title="Stop Recording">
-                    ⏹ Stop
-                </button>
-                <!-- "Start Interview" is only for initial setup, removing it from recording loop -->
-                <!-- <button id="startInterviewBtn" class="btn btn-primary">Start Interview</button> -->
-            </div>
-
-
-
-            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick="analyzeAnswer()" class="btn"
-                    style="background: var(--text-main); color: white; flex: 1;">
-                    ✨ Analyze Answer
-                </button>
-                <button id="skipButton" class="btn btn-skip">Skip</button>
-                <button id="nextButton" class="btn" disabled
-                    style="background: var(--success-color); color: white; flex: 1;">
-                    Next ➡
-                </button>
-            </div>
-        </div>
-
-        <div class="transcription-container" id="transcriptionContainer"
-            style="margin-top: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #f9fafb;">
-            <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #666;">🔴 Live Transcript</h4>
-            <!-- We use a DIV for the display so we can style 'Listening...' differently if needed, or simply mirror the text.
-                         Actually, let's just use a read-only TEXTAREA for the main content to allow scrolling, and a small div for status. -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                <div id="transcription" style="font-style: italic; color: #2563eb; font-size: 0.8rem;"></div>
-                <canvas id="audioVisualizer" width="100" height="20"
-                    style="background: #e5e7eb; border-radius: 4px;"></canvas>
-            </div>
-            <textarea id="transcriptionBox"
-                style="width: 100%; height: 100px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 6px; resize: vertical; font-family: inherit;"
-                placeholder="Your speech will appear here automatically..." readonly></textarea>
-
-            <!-- FEEDBACK AREA (Added/Restored) -->
-            <div id="feedbackArea" style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
-                <h4 style="margin: 0; color: #2563eb;">AI Analysis:</h4>
-                <div style="margin-top: 10px;">
-                    <strong>Score:</strong> <span id="score_sidebar"
-                        style="font-weight: bold; color: var(--success-color);">-</span>
+            <div class="transcription-container" id="transcriptionContainer"
+                style="margin-top: 15px; border: 1px solid #ddd; padding: 10px; border-radius: 8px; background: #f9fafb;">
+                <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #666;">🔴 Live Transcript</h4>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <div id="transcription" style="font-style: italic; color: #2563eb; font-size: 0.8rem;"></div>
+                    <canvas id="audioVisualizer" width="100" height="20"
+                        style="background: #e5e7eb; border-radius: 4px;"></canvas>
                 </div>
-                <div style="margin-top: 5px;">
-                    <strong>Feedback:</strong>
-                    <p id="feedback_sidebar"
-                        style="background: #eef2ff; padding: 10px; border-radius: 6px; font-size: 0.9rem; margin-top: 5px; color: #374151;">
-                        (Analysis will appear here)</p>
-                </div>
-                <div style="margin-top: 5px; display: none;"> <!-- Hidden by default, useful for debugging -->
-                    <strong>Corrected:</strong>
-                    <p id="corrected_sidebar" style="font-size: 0.85rem; color: #6b7280;"></p>
+                <textarea id="transcriptionBox"
+                    style="width: 100%; height: 100px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 6px; resize: vertical; font-family: inherit;"
+                    placeholder="Your speech will appear here automatically..." readonly></textarea>
+
+                <div id="feedbackArea" style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px;">
+                    <h4 style="margin: 0; color: #2563eb;">AI Analysis:</h4>
+                    <div style="margin-top: 10px;">
+                        <strong>Score:</strong> <span id="score_sidebar"
+                            style="font-weight: bold; color: var(--success-color);">-</span>
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <strong>Feedback:</strong>
+                        <p id="feedback_sidebar"
+                            style="background: #eef2ff; padding: 10px; border-radius: 6px; font-size: 0.9rem; margin-top: 5px; color: #374151;">
+                            (Analysis will appear here)</p>
+                    </div>
                 </div>
             </div>
-        </div>
+
+        </div> <!-- End of interviewSection -->
 
         <div id="status" class="status"></div>
 
@@ -428,8 +436,7 @@
         <p style="text-align: center; font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">
             Progress: <span id="progress">0</span>%
         </p>
-    </div>
-    </div>
+    </div> <!-- End of container -->
 
     <!-- Results Section (Initially Hidden) -->
     <div id="resultsSection" class="hidden"
@@ -603,6 +610,22 @@
             evt.currentTarget.className += " active";
         }
 
+        // Text to speech helper
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); // Stop previous
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                // Select English voice if available - try to find Google US English or Microsoft David
+                const voices = window.speechSynthesis.getVoices();
+                // console.log(voices); 
+                const enVoice = voices.find(v => v.name.includes("Google US English") || v.name.includes("Microsoft David")) || voices.find(v => v.lang.startsWith('en'));
+                if (enVoice) utterance.voice = enVoice;
+
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
         // Global variables
         let currentInterviewId = null;
         let currentQuestionId = 1;
@@ -751,9 +774,12 @@
                 currentQuestionId = 1;
                 window.candidateName = "Candidate";
 
-                // Update UI using style.display as per other parts of the app (not classList)
-                document.getElementById('uploadSection').style.display = 'none';
-                document.getElementById('interviewSection').style.display = 'block';
+                // Update UI - use classList to match CSS .hidden
+                document.getElementById('uploadSection').classList.add('hidden');
+                document.getElementById('interviewSection').classList.remove('hidden');
+
+                // Enforce Fullscreen
+                enableFullscreen();
 
                 // Reset recording controls
                 document.getElementById('startButton').disabled = false;
@@ -762,8 +788,6 @@
 
                 // Load first question
                 if (data.first_question) {
-                    // We can display it directly or call loadQuestion. 
-                    // Calling loadQuestion is safer to ensure UI consistency.
                     await loadQuestion(currentInterviewId, 1);
                 }
 
@@ -780,8 +804,13 @@
                 currentQuestionId = questionId;
                 window.currentQuestionId = currentQuestionId;
 
+                // Ensure interview section is visible
+                document.getElementById('interviewSection').classList.remove('hidden');
+
                 // Show loading state
-                document.getElementById('questionText').textContent = 'Loading question...';
+                const qText = document.getElementById('questionText');
+                if (qText) qText.textContent = 'Loading question...';
+
                 document.getElementById('startButton').disabled = true;
                 document.getElementById('stopButton').disabled = true;
                 document.getElementById('nextButton').disabled = true;
@@ -796,10 +825,18 @@
                 const data = await response.json();
                 const question = data.current_question;
 
+                if (!question || !question.question) {
+                    console.error("Invalid question data:", data);
+                    throw new Error("Question data missing question text");
+                }
+
                 // Update UI with question details
                 document.getElementById('questionNumber').textContent = questionId;
                 document.getElementById('totalQuestions').textContent = data.total_questions || totalQuestions;
                 document.getElementById('questionText').textContent = question.question;
+
+                // Speak the question aloud
+                speakText(question.question);
 
                 // Update question type and difficulty
                 const questionType = document.getElementById('questionType');
@@ -826,8 +863,11 @@
                 document.getElementById('skipButton').disabled = false;
                 document.getElementById('status').textContent = isSkipped ? 'Question skipped. Ready to record your answer.' : 'Ready to record your answer';
 
-                // Hide the transcription container
-                document.getElementById('transcriptionContainer').style.display = 'none';
+                // Hide the transcription container initially for new question
+                // document.getElementById('transcriptionContainer').style.display = 'none'; // Keep it visible for "Live Transcript" if desired, or hide. 
+                // Better to keep it visible but empty
+                document.getElementById('transcriptionBox').value = "";
+                document.getElementById('transcription').innerText = "";
 
                 showStatus('', 'info');
             } catch (error) {
@@ -1169,6 +1209,7 @@
                     },
                     body: JSON.stringify({
                         interview_id: currentInterviewId,
+                        question_id: currentQuestionId, // Send Question ID
                         question: question,
                         answer: answer
                     })
@@ -1185,23 +1226,29 @@
                 const correctedEl = document.getElementById("corrected");
                 if (correctedEl) correctedEl.innerText = data.corrected_answer || "N/A";
 
+                // Check if score is real AI or offline fallback
+                const isOffline = data.keywords && data.keywords.includes("Offline");
+                const scoreSuffix = isOffline ? " (Est.)" : " ✅";
+                const scoreColor = isOffline ? "#f59e0b" : "var(--success-color)"; // Orange if estimated, Green if AI
+
+                const scoreText = (data.overall_score || 0) + "/100" + scoreSuffix;
+
                 const scoreEl = document.getElementById("score");
-                if (scoreEl) scoreEl.innerText = (data.overall_score || 0) + "/100";
+                if (scoreEl) {
+                    scoreEl.innerText = scoreText;
+                    scoreEl.style.color = scoreColor;
+                    scoreEl.title = isOffline ? "Score estimated (Offline Mode)" : "Score verified by AI";
+                }
 
                 const feedbackEl = document.getElementById("feedback");
                 if (feedbackEl) feedbackEl.innerText = data.feedback || "No feedback provided.";
 
-                // Update Right Column Feedback (Sidebar/below transcript)
-                // We use different IDs or check for specific container classes if IDs were duplicated.
-                // Best practice: Update IDs in HTML to be unique (e.g., score2, feedback2). 
-                // Since I cannot change HTML in this same step easily without a huge replace, I will try to find them by context or just assume the user sees the one that IS updating.
-                // BUT, to be safe, I will try to update ALL elements with these IDs (class based would be better).
-
-                // Let's manually double update the "sidebar" ones if I renamed them. 
-                // I'll rename them in the HTML update step basically.
-
+                // Update Right Column Feedback (Sidebar)
                 const scoreSide = document.getElementById("score_sidebar");
-                if (scoreSide) scoreSide.innerText = (data.overall_score || 0) + "/100";
+                if (scoreSide) {
+                    scoreSide.innerText = scoreText;
+                    scoreSide.style.color = scoreColor;
+                }
 
                 const feedbackSide = document.getElementById("feedback_sidebar");
                 if (feedbackSide) feedbackSide.innerText = data.feedback || "No feedback provided.";
@@ -1221,6 +1268,46 @@
 
 
 </body>
+<!-- Fullscreen Warning Overlay -->
+<div id="fullscreenWarning"
+    style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; color: white; text-align: center;">
+    <h1 style="color: #ef4444; font-size: 3rem; margin-bottom: 20px;">⚠️ Anti-Cheating Alert</h1>
+    <p style="font-size: 1.5rem; margin-bottom: 30px;">Full Screen Mode is REQUIRED to continue.</p>
+    <button onclick="enableFullscreen()"
+        style="padding: 15px 30px; font-size: 1.2rem; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer;">Enable
+        Full Screen</button>
+</div>
+
+<script>
+    function enableFullscreen() {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen().catch(err => {
+                console.log("Error attempting to enable full-screen mode:", err.message);
+            });
+        } else if (elem.webkitRequestFullscreen) { /* Safari */
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) { /* IE11 */
+            elem.msRequestFullscreen();
+        }
+    }
+
+    function checkFullscreen() {
+        const warning = document.getElementById('fullscreenWarning');
+        const isInterviewActive = !document.getElementById('interviewSection').classList.contains('hidden');
+
+        if (isInterviewActive && !document.fullscreenElement) {
+            warning.style.display = 'flex';
+        } else {
+            warning.style.display = 'none';
+        }
+    }
+
+    document.addEventListener('fullscreenchange', checkFullscreen);
+
+    // Also check periodically just in case
+    setInterval(checkFullscreen, 1000);
+</script>
 <script>
     // FULL SESSION RECORDING LOGIC
     let fullSessionRecorder = null;
@@ -1299,6 +1386,10 @@
 
                 if (fallbackBtn) fallbackBtn.style.display = 'none';
                 if (loadingText) loadingText.style.display = 'none';
+
+                // START FACE DETECTION
+                startFaceDetection(videoPreview);
+
             } else {
                 console.error("Video preview element not found!");
             }
@@ -1323,8 +1414,89 @@
         }
     }
 
+    let faceDetectionInterval = null;
+    let faceModel = null;
+
+    async function startFaceDetection(video) {
+        if (!faceModel) {
+            console.log("Loading Face Detection Model...");
+            try {
+                faceModel = await blazeface.load();
+                console.log("Face Model Loaded ✅");
+            } catch (e) {
+                console.error("Failed to load face model", e);
+                return;
+            }
+        }
+
+        const warningEl = document.getElementById('faceWarning');
+
+        // Clear logic if already running
+        if (faceDetectionInterval) clearInterval(faceDetectionInterval);
+
+        faceDetectionInterval = setInterval(async () => {
+            // Only detect if video is playing and ready
+            if (video.readyState === 4 && !video.paused && !video.ended) {
+                const returnTensors = false;
+                const predictions = await faceModel.estimateFaces(video, returnTensors);
+
+                // Advanced Face Analysis
+                let warningMsg = "";
+                const videoWidth = video.videoWidth;
+                const videoHeight = video.videoHeight;
+                const margin = 20; // pixels from edge
+
+                if (predictions.length === 0) {
+                    warningMsg = "YOUR FACE IS NOT VISIBLE";
+                } else if (predictions.length > 1) {
+                    warningMsg = "MULTIPLE FACES DETECTED";
+                } else {
+                    const pred = predictions[0];
+                    const prob = pred.probability ? pred.probability[0] : 1.0;
+                    const start = pred.topLeft;
+                    const end = pred.bottomRight;
+
+                    // 1. Check Clarity/Obstruction (e.g., fingers covering face)
+                    // Lower probability usually means occlusion or bad lighting
+                    if (prob < 0.90) {
+                        warningMsg = "FACE NOT CLEAR / OBSTRUCTED";
+                    }
+                    // 2. Check Partial Face (Clipping Edges)
+                    else if (
+                        start[0] < margin || start[1] < margin ||
+                        end[0] > videoWidth - margin || end[1] > videoHeight - margin
+                    ) {
+                        warningMsg = "PARTIAL FACE - CENTER YOURSELF";
+                    }
+                }
+
+                if (warningMsg) {
+                    warningEl.style.display = 'flex';
+                    // Update the text div (2nd child)
+                    const textDiv = warningEl.querySelector('div');
+                    if (textDiv) textDiv.innerText = warningMsg;
+                    video.style.border = "3px solid red";
+                } else {
+                    warningEl.style.display = 'none';
+                    video.style.border = "none";
+                }
+            }
+        }, 500); // Check every 500ms
+    }
+
+    function stopFaceDetection() {
+        if (faceDetectionInterval) {
+            clearInterval(faceDetectionInterval);
+            faceDetectionInterval = null;
+        }
+        const warningEl = document.getElementById('faceWarning');
+        if (warningEl) warningEl.style.display = 'none';
+    }
+
     async function stopAndSaveFullSessionRecording(interviewId) {
         console.log("Stopping full session recording...");
+        stopFaceDetection(); // Stop detection loop
+
         if (!fullSessionRecorder || fullSessionRecorder.state === "inactive") {
             console.warn("Recorder not active, skipping save.");
             return;
