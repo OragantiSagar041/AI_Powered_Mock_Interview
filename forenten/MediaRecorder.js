@@ -1,271 +1,292 @@
-// Bypass HTTPS requirement for localhost in development
-if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    if (typeof process !== 'undefined') {
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    }
-}
-
 class VideoRecorder {
     constructor() {
         this.mediaRecorder = null;
         this.recordedChunks = [];
         this.stream = null;
-        
-        // DOM Elements
+        this.isRecording = false;
+
         this.videoPreview = document.getElementById('videoPreview');
         this.statusDiv = document.getElementById('status');
+        this.transcriptionBox = document.getElementById('transcriptionBox');
+        this.transcriptionDisplay = document.getElementById('transcription');
+
+        // Initialize Speech Recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            this.recognition = new SpeechRecognition();
+            // We use continuous = false and manual restart for better stability & control
+            this.recognition.continuous = false;
+            this.recognition.interimResults = true;
+            this.recognition.lang = 'en-IN';
+
+            this.recognition.onstart = () => {
+                console.log("Speech started");
+                this.transcriptionDisplay.textContent = "🎤 Listening (Active)...";
+                // this.transcriptionBox.value += "[Debug: Listener Started]\n"; 
+            };
+
+            this.recognition.onend = () => {
+                console.log("Speech ended");
+                if (this.isRecording) {
+                    // console.log("Restarting speech...");
+                    try { this.recognition.start(); } catch (e) { }
+                } else {
+                    this.transcriptionDisplay.textContent = "Stopped.";
+                }
+            };
+
+            this.recognition.onresult = (event) => {
+                let finalChunk = '';
+                let interimChunk = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalChunk += event.results[i][0].transcript;
+                    } else {
+                        interimChunk += event.results[i][0].transcript;
+                    }
+                }
+
+                // 1. Update the MAIN TEXT AREA
+                if (finalChunk) {
+                    this.transcriptionBox.value += finalChunk + ' ';
+                    this.transcriptionBox.scrollTop = this.transcriptionBox.scrollHeight;
+                }
+
+                // 2. Update the STATUS DIV with interim text
+                if (interimChunk) {
+                    this.transcriptionDisplay.textContent = '... ' + interimChunk;
+                }
+            };
+
+            this.recognition.onerror = (event) => {
+                console.error("Speech error", event.error);
+                if (event.error === 'no-speech') {
+                    // Common, ignore. Loop will restart it.
+                    return;
+                }
+                this.transcriptionDisplay.innerText = `Error: ${event.error}`;
+                // this.transcriptionBox.value += `[Debug: Error ${event.error}]\n`;
+            };
+
+            this.recognition.nomatch = () => {
+                console.log("Speech recognition: No match found.");
+            };
+        } else {
+            console.warn("Web Speech API not supported in this browser.");
+            this.recognition = null;
+        }
     }
 
     async startRecording() {
         try {
-            // Request access to camera and microphone
+            // ALWAYS get a dedicated audio stream for recording/speech
+            // Reusing the video stream (window.mediaStream) often causes issues with SpeechRecognition
+            // because the video track might interfere or the audio track might be optimized for playback.
+            console.log("Requesting dedicated audio stream for best recognition...");
             this.stream = await navigator.mediaDevices.getUserMedia({
-                video: true,
-                audio: true
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                },
+                video: false
             });
-            
-            // Display the camera feed
-            this.videoPreview.srcObject = this.stream;
-            this.videoPreview.muted = true; // Mute to avoid feedback
-            await this.videoPreview.play();
-            
-            // Initialize MediaRecorder for video (we'll still record but not show it)
+
+            // 🎧 MediaRecorder (AUDIO)
             this.mediaRecorder = new MediaRecorder(this.stream, {
-                mimeType: 'video/webm;codecs=vp9,opus'
+                mimeType: 'audio/webm;codecs=opus'
             });
-            
-            // Initialize speech recognition
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                throw new Error('Speech recognition not supported in this browser');
-            }
-            
-            this.recognition = new SpeechRecognition();
-            this.recognition.continuous = true;
-            this.recognition.interimResults = true;
-            this.transcript = '';
-            
-            this.recognition.onresult = (event) => {
-                let interimTranscript = '';
-                let finalTranscript = '';
-                
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) {
-                        finalTranscript += transcript + ' ';
-                    } else {
-                        interimTranscript += transcript;
-                    }
-                }
-                
-                document.getElementById('transcription').textContent = this.transcript + finalTranscript + interimTranscript;
-            };
-            
-            this.recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-                this.showError('Error in speech recognition: ' + event.error);
-            };
-            
-            // Start speech recognition
-            this.recognition.start();
-            
-            // Reset recorded chunks
+
             this.recordedChunks = [];
-            this.transcript = '';
-            
-            // Show transcription container
+            this.isRecording = true;
+
+            this.mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    this.recordedChunks.push(e.data);
+                }
+            };
+
+            // UI
+            this.transcriptionDisplay.textContent = '🎙 Listening...';
+            // Don't clear the box if we want to keep history, or clear it for new answer?
+            // Usually for a new answer we clear it.
+            this.transcriptionBox.value = '';
+            document.getElementById('transcriptionContainer').classList.remove('hidden'); // Ensure visible
             document.getElementById('transcriptionContainer').style.display = 'block';
-            document.getElementById('transcription').textContent = 'Listening...';
-            
-            // Start recording
-            this.mediaRecorder.start(100);
-            this.showStatus('Recording started... Speak now.', 'info');
-            
-        } catch (error) {
-            console.error('Error accessing media devices:', error);
-            this.showError('Could not access camera/microphone. Please check permissions.');
-            throw error;
+
+            this.mediaRecorder.start(1000);
+
+            // Start Speech Recognition
+            if (this.recognition) {
+                try {
+                    this.recognition.start();
+                } catch (e) {
+                    console.warn("Recognition already started or failed:", e);
+                }
+            }
+
+            // Start Visualizer
+            // this.visualizeAudio(this.stream); // DISABLED to rule out AudioContext conflict
+
+            this.showStatus('Recording started. Speak clearly.', 'info');
+
+        } catch (err) {
+            console.error(err);
+            this.showError('Microphone permission denied.');
+            throw err;
         }
     }
 
+    visualizeAudio(stream) {
+        const canvas = document.getElementById("audioVisualizer");
+        const ctx = canvas.getContext("2d");
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        this.visualizerActive = true;
+
+        const draw = () => {
+            if (!this.visualizerActive) {
+                audioCtx.close();
+                return;
+            }
+
+            requestAnimationFrame(draw);
+            analyser.getByteFrequencyData(dataArray);
+
+            // Calculate average volume
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / bufferLength;
+
+            // Draw
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Background
+            ctx.fillStyle = '#e5e7eb';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Bar
+            const barWidth = (average / 255) * canvas.width;
+
+            if (average > 10) {
+                ctx.fillStyle = '#10b981'; // Green for good volume
+            } else {
+                ctx.fillStyle = '#9ca3af'; // Grey/low
+            }
+
+            ctx.fillRect(0, 0, barWidth, canvas.height);
+        };
+        draw();
+    }
+
     async stopRecording() {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
                 resolve();
                 return;
             }
-            
-            // Stop speech recognition if it's active
+
+            this.isRecording = false;
+            this.visualizerActive = false; // Stop Visualizer Loop
+            this.transcriptionDisplay.textContent = "Stopping..."; // Immediate UI Feedback
+
+            // Stop Speech Recognition
             if (this.recognition) {
-                this.recognition.stop();
-            }
-            
-            this.mediaRecorder.onstop = () => {
-                // Finalize the transcription
-                const transcription = document.getElementById('transcription');
-                if (transcription.textContent === 'Listening...') {
-                    transcription.textContent = 'No speech was detected. Please try again.';
+                try {
+                    console.log("Stopping speech recognition manually...");
+                    this.recognition.stop();
+                } catch (e) {
+                    console.warn("Recognition already stopped:", e);
                 }
-                
-                // Stop all tracks in the stream
+            }
+
+            this.mediaRecorder.onstop = async () => {
+                // STOP THE TRACKS (Vital since we created a dedicated stream)
                 if (this.stream) {
                     this.stream.getTracks().forEach(track => track.stop());
                 }
-                
-                this.showStatus('Recording stopped', 'success');
+
+                try {
+                    await this.uploadRecording(
+                        window.currentInterviewId,
+                        window.currentQuestionId
+                    );
+                } catch (err) {
+                    console.error(err);
+                    this.showError('Upload failed');
+                }
+
                 resolve();
             };
-            
-            // Stop recording
+
             this.mediaRecorder.stop();
+
+            // Failsafe: If onstop doesn't fire in 2s, force resolve
+            setTimeout(() => {
+                if (this.mediaRecorder.state === 'inactive') {
+                    // console.log("Force resolving stop promise (failsafe)");
+                    resolve();
+                }
+            }, 2000);
         });
     }
 
     async uploadRecording(interviewId, questionId) {
         if (!interviewId || !questionId) {
-            const error = new Error('Missing required parameters');
-            console.error('Validation error:', { interviewId, questionId });
-            this.showError('Invalid request. Please refresh the page and try again.');
-            throw error;
+            throw new Error('Missing interview or question ID');
         }
 
-        if (this.recordedChunks.length === 0) {
-            const error = new Error('No recording data available');
-            console.error('Upload failed:', error);
-            this.showError('No recording to upload. Please record your answer first.');
-            throw error;
+        const audioBlob = new Blob(this.recordedChunks, {
+            type: 'audio/webm'
+        });
+
+        const formData = new FormData();
+        formData.append('audio', audioBlob, `answer_${Date.now()}.webm`);
+        formData.append('interview_id', interviewId);
+        formData.append('question_id', questionId);
+
+        const response = await fetch('http://127.0.0.1:8000/transcribe', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data?.detail || 'Transcription failed');
         }
-        
-        let uploadAbortController = new AbortController();
-        const UPLOAD_TIMEOUT = 30000; // 30 seconds timeout
-        
-        try {
-            this.showStatus('Preparing upload...', 'info');
-            
-            // Combine recorded chunks into a single blob
-            const blob = new Blob(this.recordedChunks, { type: 'video/webm' });
-            
-            // Create form data
-            const formData = new FormData();
-            formData.append('video', blob, `answer_${Date.now()}_q${questionId}.webm`);
-            formData.append('interview_id', interviewId);
-            formData.append('question_id', questionId.toString());
-            
-            // Add metadata for debugging
-            const metadata = {
-                timestamp: new Date().toISOString(),
-                userAgent: navigator.userAgent,
-                blobSize: blob.size,
-                questionId,
-                interviewId
-            };
-            formData.append('metadata', JSON.stringify(metadata));
-            
-            console.debug('Starting upload:', metadata);
-            
-            // Set upload timeout
-            const timeoutId = setTimeout(() => {
-                uploadAbortController.abort();
-                this.showError('Upload timed out. Please check your connection and try again.');
-            }, UPLOAD_TIMEOUT);
-            
-            // Upload to server with progress tracking
-            this.showStatus('Uploading your answer... (0%)', 'info');
-            
-            const response = await fetch('http://127.0.0.1:8009/upload_answer', {
-                method: 'POST',
-                body: formData,
-                signal: uploadAbortController.signal,
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Request-ID': `upload-${Date.now()}`
-                },
-                mode: 'cors',
-                credentials: 'include'
-            }).catch(error => {
-                if (error.name === 'AbortError') {
-                    throw new Error('Upload was cancelled or timed out');
-                }
-                console.error('Network error:', error);
-                throw new Error(`Network error: ${error.message}`);
-            }).finally(() => clearTimeout(timeoutId));
-            
-            let responseData;
-            try {
-                responseData = await response.json();
-            } catch (e) {
-                console.error('Failed to parse JSON response:', e);
-                throw new Error('Received invalid response from server');
-            }
-            
-            if (!response.ok) {
-                const errorMessage = responseData?.detail || 
-                                   responseData?.message || 
-                                   `Server error: ${response.status} ${response.statusText}`;
-                
-                console.error('Upload failed:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    responseData,
-                    headers: Object.fromEntries([...response.headers.entries()])
-                });
-                
-                throw new Error(errorMessage);
-            }
-            
-            console.debug('Upload successful:', responseData);
-            this.showStatus('Answer uploaded successfully!', 'success');
-            return responseData;
-            
-        } catch (error) {
-            const errorDetails = {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-                timestamp: new Date().toISOString(),
-                interviewId,
-                questionId,
-                blobSize: this.recordedChunks.reduce((acc, chunk) => acc + chunk.size, 0)
-            };
-            
-            if (error.response) {
-                errorDetails.response = {
-                    status: error.response.status,
-                    statusText: error.response.statusText,
-                    data: error.data
-                };
-            }
-            
-            console.error('Upload error:', errorDetails);
-            
-            // Show user-friendly error message
-            let userMessage = 'Upload failed. ';
-            if (error.message.includes('NetworkError')) {
-                userMessage += 'Network error. Please check your internet connection.';
-            } else if (error.message.includes('timed out')) {
-                userMessage += 'The upload took too long. Please try again.';
-            } else if (error.message.includes('cancelled')) {
-                userMessage = 'Upload was cancelled.';
-            } else {
-                userMessage += error.message || 'Please try again later.';
-            }
-            
-            this.showError(userMessage);
-            throw error;
-        } finally {
-            // Clean up
-            uploadAbortController = null;
+
+        if (data.text && data.text !== 'No speech detected') {
+            // Only update if we got a valid response
+            this.transcriptionBox.value = data.text;
+        } else {
+            console.warn("Backend returned no speech, keeping live text.");
         }
+
+        this.transcriptionDisplay.textContent = "Processing complete.";
+
+        this.showStatus('Answer transcribed successfully', 'success');
+        return data;
     }
 
-    showStatus(message, type = 'info') {
-        if (this.statusDiv) {
-            this.statusDiv.textContent = message;
-            this.statusDiv.className = `status ${type}`;
-        }
+    showStatus(msg, type = 'info') {
+        this.statusDiv.textContent = msg;
+        this.statusDiv.className = `status ${type}`;
     }
 
-    showError(message) {
-        this.showStatus(message, 'error');
+    showError(msg) {
+        this.showStatus(msg, 'error');
     }
 }
+
+window.VideoRecorder = VideoRecorder;

@@ -4,38 +4,78 @@ from fastapi.responses import JSONResponse
 from openai import OpenAI
 import os
 import tempfile
+from pydantic import BaseModel
+from analyze_answer import analyze_answer
 import shutil
 from datetime import datetime
 from typing import List, Dict, Optional
 import json
 import uuid
+from dotenv import load_dotenv
+import PyPDF2
+from docx import Document
+import io
+import subprocess
+import tempfile
+from openai import OpenAI
+import requests
+from pydantic import BaseModel
+from database import conn, cursor
+from datetime import datetime
+
+
+load_dotenv()
 
 # Configuration
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+from fastapi.staticfiles import StaticFiles
+
 app = FastAPI()
+
+# Mount uploads folder to serve files
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://127.0.0.1:3000",  # Frontend URL
-        "http://localhost:3000",   # Alternative frontend URL
+        "https://localhost:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 # In-memory storage (replace with database in production)
 interviews = {}
 
 # Initialize OpenAI client
-# The API key should be set as an environment variable
-# For example: export OPENAI_API_KEY='your-api-key-here'
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")  # Use environment variable
+)
+
+def get_or_create_candidate(name: str) -> int:
+    cursor.execute("SELECT id FROM candidates WHERE name = ?", (name,))
+    row = cursor.fetchone()
+
+    if row:
+        return row[0]
+
+    cursor.execute(
+        "INSERT INTO candidates (name, created_at) VALUES (?, ?)",
+        (name, datetime.now().isoformat())
+    )
+    conn.commit()
+    return cursor.lastrowid
+
 
 def extract_skills(text: str) -> List[str]:
     """Extract skills from resume text."""
@@ -61,6 +101,35 @@ def extract_skills(text: str) -> List[str]:
     
     return list(dict.fromkeys(skills))[:8]  # Remove duplicates and limit to 8 skills
 
+def analyze_resume_or_jd(text: str):
+    prompt = f"""
+    Analyze the following resume or job description and return STRICT JSON only:
+    {{
+      "skills": [],
+      "projects": [],
+      "tools_and_technologies": [],
+      "experience_level": "",
+      "domains": [],
+      "important_keywords": []
+    }}
+    Content: {text}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="google/gemini-2.0-flash-001", # OpenRouter model ID
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        raw_text = response.choices[0].message.content
+        # Extract JSON
+        json_start = raw_text.find("{")
+        json_end = raw_text.rfind("}") + 1
+        return json.loads(raw_text[json_start:json_end])
+    except Exception as e:
+        print(f"OpenRouter Analysis Error: {e}")
+        return {"skills": [], "projects": [], "tools_and_technologies": [], "experience_level": "Unknown", "domains": [], "important_keywords": []}
+    
 def extract_experiences(text: str) -> List[Dict]:
     """Extract work experiences from resume text."""
     experiences = []
@@ -242,146 +311,458 @@ def generate_resume_questions(resume_text: str) -> List[Dict[str, str]]:
     print(f"Generated {len(questions)} questions for the interview")
     return questions
 
+def extract_text_from_file(file_content: bytes, filename: str) -> str:
+    """Extract text content from different file types."""
+    file_extension = filename.lower().split('.')[-1]
+
+    try:
+        if file_extension == 'pdf':
+            # Extract text from PDF
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+            return text.strip()
+
+        elif file_extension in ['docx', 'doc']:
+            # Extract text from DOCX
+            doc = Document(io.BytesIO(file_content))
+            text = ""
+            for paragraph in doc.paragraphs:
+                text += paragraph.text + "\n"
+            return text.strip()
+
+        elif file_extension == 'txt':
+            # Handle plain text files
+            return file_content.decode('utf-8')
+
+        else:
+            # Try to decode as UTF-8 text for other formats
+            return file_content.decode('utf-8')
+
+    except Exception as e:
+        print(f"Error extracting text from {filename}: {e}")
+        # Fallback: try to decode as UTF-8
+        try:
+            return file_content.decode('utf-8', errors='ignore')
+        except:
+            raise HTTPException(status_code=400, detail=f"Unable to process file {filename}. Supported formats: PDF, DOCX, TXT")
+
+def generate_jd_questions(jd_text: str) -> List[Dict[str, str]]:
+    """Generate interview questions based on Job Description using AI."""
+    print("Generating questions from Job Description...")
+    
+    questions = [
+        {
+            "id": 1,
+            "question": "Can you please introduce yourself and tell us why you are interested in this specific role?",
+            "difficulty": "Easy",
+            "type": "Self-Introduction",
+            "category": "Basic"
+        }
+    ]
+
+    prompt = f"""
+    You are an expert technical recruiter constructing a rigorous interview.
+    
+    Job Description:
+    {jd_text[:4000]}
+    
+    Task:
+    1. EXTRACT top 5 critical technical keywords/skills from the Job Description (e.g., 'React', 'AWS', 'System Design').
+    2. GENERATE 6 specific interview questions testing these exact skills.
+       - The extracted keywords MUST be the focus of the questions.
+       - Do NOT ask generic "soft skill" questions unless the JD emphasizes them.
+       - Vary difficulty: Start with basic checks, move to scenario-based/hard problems.
+    
+    Return STRICT JSON format:
+    {{
+        "extracted_keywords": ["Skill1", "Skill2", ...],
+        "questions": [
+            {{
+                "question": "Specific question testing a skill...",
+                "difficulty": "Medium",
+                "type": "Technical",
+                "category": "Skill Name"
+            }}
+        ]
+    }}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = response.choices[0].message.content
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        data = json.loads(raw[start:end])
+        
+        # Log extracted keywords for debugging/logging
+        print(f"✅ Extracted JD Keywords: {data.get('extracted_keywords', [])}")
+        
+        # Add generated questions to the list
+        for q in data.get("questions", []):
+            questions.append({
+                "id": len(questions) + 1,
+                "question": q["question"],
+                "difficulty": q.get("difficulty", "Medium"),
+                "type": q.get("type", "General"),
+                "category": q.get("category", "JD Requirement")
+            })
+
+            
+    except Exception as e:
+        print(f"Error generating JD questions: {e}")
+        
+        # --- OFFLINE/FALLBACK MODE ---
+        # If API fails, try to extract keywords manually using Regex/List
+        common_keywords = [
+            "Python", "Java", "React", "Angular", "Vue", "AWS", "Azure", "Docker", "Kubernetes", "SQL", 
+            "NoSQL", "Git", "CI/CD", "Machine Learning", "AI", "Data Science", "Spring", "Node.js", 
+            "JavaScript", "TypeScript", "C++", "C#", ".NET", "Go", "Rust", "Swift", "Kotlin", "Flutter"
+        ]
+        
+        found_keywords = []
+        for kw in common_keywords:
+            if kw.lower() in jd_text.lower():
+                found_keywords.append(kw)
+        
+        print(f"⚠️ Offline Mode: Found keywords {found_keywords}")
+        
+        if found_keywords:
+            for i, kw in enumerate(found_keywords[:5]): # Top 5 matched
+                questions.append({
+                    "id": len(questions) + 1,
+                    "question": f"The job description mentions {kw}. Can you describe your experience with {kw} and a challenging problem you solved using it?",
+                    "difficulty": "Medium",
+                    "type": "Technical",
+                    "category": f"{kw} Skill"
+                })
+        else:
+             # Genuine Fallback if absolutely no keywords matched
+             questions.extend([
+                {
+                    "id": 2,
+                    "question": "What specifically attracted you to the technical requirements of this position?",
+                    "difficulty": "Medium",
+                    "type": "General",
+                    "category": "Fit"
+                },
+                {
+                    "id": 3,
+                    "question": "Can you walk us through your most significant technical achievement relevant to this role?",
+                    "difficulty": "Hard",
+                    "type": "Project",
+                    "category": "Experience"
+                }
+            ])
+
+    return questions
+
 def generate_mock_questions(text: str, source: str) -> List[Dict[str, str]]:
-    """Generate mock interview questions without using the OpenAI API."""
+    """Generate mock interview questions."""
     if "resume" in source.lower():
         return generate_resume_questions(text)
     else:  # job description
-        return [
-            {
-                "id": 1, 
-                "question": "What interests you about this position and how does it align with your career goals?", 
-                "difficulty": "Easy",
-                "type": "General"
-            },
-            {
-                "id": 2, 
-                "question": "How would your skills and experience help you succeed in this role?", 
-                "difficulty": "Medium",
-                "type": "Experience"
-            },
-            {
-                "id": 3, 
-                "question": "Can you describe a challenging project you worked on and how it demonstrates your ability to handle this position's responsibilities?", 
-                "difficulty": "Hard",
-                "type": "Project"
-            }
-        ]
+        return generate_jd_questions(text)
+
+def score_answer(question: str, answer: str):
+    prompt = f"""
+You are an interview evaluator.
+
+Question:
+{question}
+
+Candidate Answer:
+{answer}
+
+Evaluate on:
+1. Relevance
+2. Clarity
+3. Technical depth (if applicable)
+4. Confidence
+
+Return STRICT JSON only:
+{{
+  "score": 0-10,
+  "feedback": "short constructive feedback",
+  "keywords": ["keyword1", "keyword2"]
+}}
+"""
+
+    response = client.chat.completions.create(
+        model="openai/gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw = response.choices[0].message.content
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    return json.loads(raw[start:end])
+
+# --- ADAPTIVE INTERVIEW LOGIC ---
+
+class NextQuestionRequest(BaseModel):
+    interview_id: str
+    current_question_id: int
+    answer_text: str
+
+def generate_followup_question(answer_text: str, resume_context: str, current_q_id: int) -> Dict:
+    prompt = f"""
+    You are an intelligent technical interviewer.
+    
+    Context:
+    - Candidate Resume Summary: {resume_context[:1000]}...
+    - Candidate's Last Answer: "{answer_text}"
+    
+    Task:
+    Generate ONE follow-up interview question (JSON) to dig deeper into what the candidate just said.
+    - If they mentioned a Project, ask about architectural decisions or challenges in THAT project.
+    - If they mentioned a specific Tech Stack (e.g., React, Python), ask a conceptual question about it.
+    - If their answer was vague, ask them to clarify specific examples.
+    
+    Return STRICT JSON:
+    {{
+        "question": "The actual question string...",
+        "difficulty": "Medium",
+        "type": "Follow-up",
+        "category": "Deep Dive"
+    }}
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = response.choices[0].message.content
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        q_data = json.loads(raw[start:end])
+        
+        # Add ID
+        q_data["id"] = current_q_id + 1
+        return q_data
+    except Exception as e:
+        print(f"Error generating follow-up: {e}")
+        # Fallback
+        return {
+            "id": current_q_id + 1,
+            "question": "Can you elaborate more on the technical challenges you faced in your recent projects?",
+            "difficulty": "Medium",
+            "type": "General",
+            "category": "Follow-up"
+        }
+
+@app.post("/generate-next-question")
+def api_gen_next_question(req: NextQuestionRequest):
+    if req.interview_id not in interviews:
+        raise HTTPException(status_code=404, detail="Interview not found")
+        
+    interview = interviews[req.interview_id]
+    
+    # Generate the question
+    new_question = generate_followup_question(
+        req.answer_text, 
+        interview.get("profile_text", ""),
+        req.current_question_id
+    )
+    
+    # Insert this new question into the list right after current
+    # Find current index
+    current_idx = -1
+    for i, q in enumerate(interview["questions"]):
+        if int(q["id"]) == req.current_question_id:
+            current_idx = i
+            break
+            
+    if current_idx != -1:
+        # Check if we already have a follow-up (avoid infinite expansion if re-running)
+        if current_idx + 1 < len(interview["questions"]):
+             # If next question is already a "Follow-up", maybe replace it? 
+             # For now, let's just INSERT it to be dynamic.
+             # Shift IDs of subsequent questions
+             for q in interview["questions"][current_idx+1:]:
+                 q["id"] = int(q["id"]) + 1
+                 
+        interview["questions"].insert(current_idx + 1, new_question)
+        
+        # Update DB with new question list
+        cursor.execute("UPDATE interviews SET questions = ? WHERE id = ?", (json.dumps(interview["questions"]), req.interview_id))
+        conn.commit()
+        
+        return new_question
+    
+    raise HTTPException(status_code=400, detail="Current question ID not found")
+
+
+@app.post("/upload-resume")
+@app.post("/upload-resume/")
+async def upload_resume(
+    file: UploadFile = File(...),
+    source: str = Form("resume")
+):
+    try:
+        print(f"Uploading resume with source: {source}")
+
+        # Read file content
+        content = await file.read()
+
+        # Extract text based on file type
+        content_str = extract_text_from_file(content, file.filename)
+
+        if not content_str.strip():
+            raise HTTPException(status_code=400, detail="No readable text found in the file")
+
+        # Generate interview ID
+        interview_id = f"int_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
+
+        # Analyze the resume
+        profile_analysis = analyze_resume_or_jd(content_str)
+
+        # Generate questions
+        questions = generate_resume_questions(content_str)
+
+        if not questions:
+            raise HTTPException(status_code=400, detail="Failed to generate questions")
+
+        # Store interview data (RAM)
+        interviews[interview_id] = {
+            "id": interview_id,
+            "source": source,
+            "profile_text": content_str[:5000], # Store more text
+            "profile_analysis": profile_analysis,
+            "questions": questions,
+            "answers": {},
+            "created_at": datetime.now().isoformat()
+        }
+
+        # Store interview data (DB)
+        try:
+            cursor.execute("""
+                INSERT INTO interviews (id, source, profile_text, questions, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                interview_id, 
+                source, 
+                content_str[:5000], 
+                json.dumps(questions), 
+                datetime.now().isoformat()
+            ))
+            conn.commit()
+        except Exception as db_e:
+            print(f"⚠️ DB Save Error: {db_e}")
+
+
+        return {
+            "interview_id": interview_id,
+            "total_questions": len(questions),
+            "first_question": questions[0]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process resume: {str(e)}")
 
 @app.post("/start-interview")
 @app.post("/start-interview/")
 async def start_interview(
     content: str = Form(...),
-    source: str = Form("resume")  # Default to "resume" if not provided
+    source: str = Form("resume")
 ):
-    """Start a new interview session with text content."""
     try:
         print(f"Starting interview with source: {source}")
-        print(f"Content length: {len(content)} characters")
-        
+
         interview_id = f"int_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
-        
-        # Generate questions based on the source
-        if source == "resume":
-            questions = generate_resume_questions(content)
-        else:  # job_description or other
-            questions = generate_resume_questions(content)  # For now, use the same function
-        
+
+        # ✅ STEP-3.2 → AI ANALYSIS (CORRECT PLACE)
+        profile_analysis = analyze_resume_or_jd(content)
+
+        # Generate questions based on Source (Resume vs JD)
+        questions = generate_mock_questions(content, source)
+
         if not questions:
-            raise HTTPException(status_code=400, detail="Failed to generate questions from the provided content.")
-        
-        # Store the interview data
+            raise HTTPException(status_code=400, detail="Failed to generate questions")
+
+        # ✅ STEP-3.3 → STORE ANALYSIS HERE (RAM)
         interviews[interview_id] = {
             "id": interview_id,
             "source": source,
-            "content": content[:500],  # Store first 500 chars for reference
+            "profile_text": content[:5000],
+            "profile_analysis": profile_analysis,
             "questions": questions,
             "answers": {},
             "created_at": datetime.now().isoformat()
         }
-        
-        print(f"Generated {len(questions)} questions for interview {interview_id}")
-        
+
+        # Store interview data (DB)
+        try:
+            cursor.execute("""
+                INSERT INTO interviews (id, source, profile_text, questions, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                interview_id, 
+                source, 
+                content[:5000], 
+                json.dumps(questions), 
+                datetime.now().isoformat()
+            ))
+            conn.commit()
+        except Exception as db_e:
+            print(f"⚠️ DB Save Error: {db_e}")
+
         return {
             "interview_id": interview_id,
             "total_questions": len(questions),
-            "first_question": questions[0] if questions else None
+            "first_question": questions[0]
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/upload-resume")
-async def upload_resume(
-    file: UploadFile = File(..., description="The resume file to upload"),
-    source: str = Form("resume", description="Source of the upload, defaults to 'resume'")
-):
-    """Handle resume or JD file upload and start interview."""
-    try:
-        print(f"Received file upload request: {file.filename}, size: {file.size} bytes")
-        
-        # Validate file type
-        file_extension = os.path.splitext(file.filename)[1].lower()
-        allowed_extensions = ['.pdf', '.docx', '.txt']
-        if file_extension not in allowed_extensions:
-            error_msg = f"Unsupported file type: {file_extension}. Allowed types: {', '.join(allowed_extensions)}"
-            print(error_msg)
-            raise HTTPException(status_code=400, detail=error_msg)
-        
-        # Read file content with size limit (5MB)
-        max_size = 5 * 1024 * 1024  # 5MB
-        content = await file.read()
-        
-        if len(content) > max_size:
-            error_msg = f"File too large: {len(content)} bytes. Maximum size is 5MB."
-            print(error_msg)
-            raise HTTPException(status_code=400, detail=error_msg)
-        
-        # Decode content
-        try:
-            text_content = content.decode('utf-8', errors='ignore')
-        except Exception as decode_error:
-            error_msg = f"Error decoding file content: {str(decode_error)}"
-            print(error_msg)
-            raise HTTPException(status_code=400, detail=error_msg)
-        
-        # Log file processing
-        print(f"Processing file: {file.filename}, content length: {len(text_content)} characters")
-        
-        # If it's a large file, truncate to first 10,000 characters
-        if len(text_content) > 10000:
-            print("File content exceeds 10,000 characters, truncating...")
-            text_content = text_content[:10000] + "\n\n[Content truncated for processing]"
-        
-        # Start interview with the extracted text
-        print("Starting interview with extracted text...")
-        return await start_interview(content=text_content, source=source)
-        
-    except HTTPException as http_err:
-        # Re-raise HTTP exceptions as they are
-        raise http_err
-    except Exception as e:
-        error_msg = f"Unexpected error processing file: {str(e)}"
-        print(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
 @app.get("/interview/{interview_id}/question/{question_id}")
 async def get_question(interview_id: str, question_id: int):
-    """Get a specific question from an interview."""
+    # Restore from DB if not in RAM
+    if interview_id not in interviews:
+        cursor.execute("SELECT source, profile_text, questions, created_at FROM interviews WHERE id = ?", (interview_id,))
+        row = cursor.fetchone()
+        if row:
+            print(f"🔄 Restoring interview {interview_id} from DB...")
+            try:
+                loaded_questions = json.loads(row[2])
+                interviews[interview_id] = {
+                    "id": interview_id,
+                    "source": row[0],
+                    "profile_text": row[1],
+                    "questions": loaded_questions,
+                    "answers": {},
+                    "created_at": row[3]
+                }
+            except Exception as e:
+                print(f"Restore failed: {e}")
+    
     if interview_id not in interviews:
         raise HTTPException(status_code=404, detail="Interview not found")
     
     interview = interviews[interview_id]
-    question = next((q for q in interview["questions"] if q["id"] == question_id), None)
+    # Ensure ID comparison works (cast both to int)
+    question = next((q for q in interview["questions"] if int(q["id"]) == int(question_id)), None)
     
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
         
     return {
-        "interview_id": interview_id,
-        "current_question": question,
+        "current_question": question,  # This key must match what your HTML looks for
         "total_questions": len(interview["questions"]),
-        "has_next": question_id < len(interview["questions"])
+        "interview_id": interview_id
     }
+# Add this import at the top
+
+import base64
 
 @app.post("/upload-answer")
 async def upload_answer(
@@ -389,44 +770,25 @@ async def upload_answer(
     question_id: int = Form(...),
     video: UploadFile = File(...)
 ):
-    """Upload a video answer for a specific question."""
     if interview_id not in interviews:
         raise HTTPException(status_code=404, detail="Interview not found")
-    
-    # Create directory for this interview if it doesn't exist
-    interview_dir = os.path.join(UPLOAD_FOLDER, interview_id)
-    os.makedirs(interview_dir, exist_ok=True)
-    
-    # Save the video file
-    filename = f"q{question_id}_{int(datetime.now().timestamp())}.webm"
-    file_path = os.path.join(interview_dir, filename)
-    
-    try:
-        with open(file_path, "wb") as buffer:
-            # Read and save the file in chunks to handle large files
-            while True:
-                chunk = await video.read(1024 * 1024)  # 1MB chunks
-                if not chunk:
-                    break
-                buffer.write(chunk)
-        
-        # Update interview data
-        interviews[interview_id]["answers"][question_id] = {
-            "video_path": file_path,
-            "uploaded_at": datetime.now().isoformat()
-        }
-        
-        return {
-            "status": "success",
-            "interview_id": interview_id,
-            "question_id": question_id,
-            "saved_path": file_path
-        }
-    except Exception as e:
-        # Clean up the file if there was an error
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        raise HTTPException(status_code=500, detail=f"Error saving video: {str(e)}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        video_path = os.path.join(tmp, "input.webm")
+        audio_path = os.path.join(tmp, "audio.wav")
+
+        with open(video_path, "wb") as f:
+            f.write(await video.read())
+
+        # Extract audio using ffmpeg
+        subprocess.run([
+            "ffmpeg", "-i", video_path,
+            "-ar", "16000",
+            "-ac", "1",
+            audio_path
+        ], check=True)
+
+        # Whisper STT
 
 @app.get("/interview/{interview_id}/summary")
 async def get_interview_summary(interview_id: str):
@@ -444,7 +806,210 @@ async def get_interview_summary(interview_id: str):
         "questions": interview["questions"],
         "answers": interview["answers"]
     }
+@app.get("/")
+def root():
+    return {"status": "Backend is running"}
+
+class ChatRequest(BaseModel):
+    message: str
+@app.post("/chat")
+def chat(req: ChatRequest):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost",
+        "X-Title": "Voice Chatbot"
+    }
+
+    data = {
+        "model": "openai/gpt-4o-mini",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful interview assistant. Keep responses short."
+            },
+            {
+                "role": "user",
+                "content": req.message
+            }
+        ]
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+
+    return {
+        "reply": response.json()["choices"][0]["message"]["content"]
+    }
+
+class AnswerRequest(BaseModel):
+    interview_id: str
+    candidate_name: str
+    question_id: int
+    question_text: str
+    answer_text: str
+    
+
+
+@app.post("/save-answer")
+async def save_answer(
+    interview_id: str = Form(...),
+    question_id: int = Form(...),
+    question_text: str = Form(...),
+    answer_text: str = Form(...),
+    candidate_name: str = Form("Candidate")
+):
+    print(f"💾 Saving answer for {question_id}...")
+    
+    # Get context
+    context = ""
+    # Try RAM first
+    if interview_id in interviews:
+         profile_text = interviews[interview_id].get("profile_text", "")
+         source = interviews[interview_id].get("source", "Resume")
+         context = f"Candidate's {source}: {profile_text}"
+    else:
+        # Try DB
+        try:
+            cursor.execute("SELECT profile_text, source FROM interviews WHERE id = ?", (interview_id,))
+            row = cursor.fetchone()
+            if row:
+                context = f"Candidate's {row[1]}: {row[0]}"
+                # Optional: Restore to RAM for next time
+                # interviews[interview_id] = { "profile_text": row[0], "source": row[1] } 
+        except Exception as e:
+            print(f"⚠️ Context fetch error: {e}")
+
+    # Use the robust analyze_answer function
+    ai_result = analyze_answer(question_text, answer_text, context)
+
+    # Prepare keywords (handle list or string)
+    keywords = ai_result.get("keywords", [])
+    if isinstance(keywords, list):
+        keywords_str = ",".join(keywords)
+    else:
+        keywords_str = str(keywords)
+
+    cursor.execute("""
+        INSERT INTO answers (
+            interview_id,
+            question_id,
+            question_text,
+            answer_text,
+            ai_score,
+            ai_feedback,
+            ai_keywords,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        interview_id,
+        question_id,
+        question_text,
+        answer_text,
+        ai_result.get("overall_score", 0),
+        ai_result.get("feedback", "No feedback"),
+        keywords_str,
+        datetime.now().isoformat()
+    ))
+
+    conn.commit()
+    print("✅ Answer saved to DB.")
+
+    return {
+        "status": "saved",
+        "ai_score": ai_result.get("overall_score", 0),
+        "ai_feedback": ai_result.get("feedback", "")
+    }
+
+@app.get("/interview/{interview_id}/ai-summary")
+def interview_ai_summary(interview_id: str):
+    cursor.execute("""
+        SELECT ai_score FROM answers
+        WHERE interview_id = ? AND ai_score IS NOT NULL
+    """, (interview_id,))
+    
+    scores = [row[0] for row in cursor.fetchall()]
+    avg_score = round(sum(scores) / len(scores), 2) if scores else 0
+
+    return {
+        "interview_id": interview_id,
+        "average_score": avg_score,
+        "total_questions": len(scores)
+    }
+
+class AnalyzeRequest(BaseModel):
+    interview_id: Optional[str] = None
+    question: str
+    answer: str
+
+@app.post("/analyze-answer")
+def analyze(req: AnalyzeRequest):
+    context = ""
+    # Retrieve Resume/JD context if interview_id is provided
+    if req.interview_id and req.interview_id in interviews:
+         profile_text = interviews[req.interview_id].get("profile_text", "")
+         source = interviews[req.interview_id].get("source", "Resume")
+         context = f"Candidate's {source}: {profile_text}"
+    
+    return analyze_answer(req.question, req.answer, context)
+
+@app.post("/upload-full-recording")
+async def upload_full_recording(
+    interview_id: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        # Create directory for recordings if it doesn't exist
+        recordings_dir = os.path.join(UPLOAD_FOLDER, "recordings")
+        os.makedirs(recordings_dir, exist_ok=True)
+        
+        # Generate filename
+        filename = f"{interview_id}_full_recording.webm"
+        file_path = os.path.join(recordings_dir, filename)
+        
+        # Save file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Update database
+        cursor.execute("""
+            UPDATE interviews
+            SET recording_path = ?
+            WHERE id = ?
+        """, (file_path, interview_id))
+        conn.commit()
+        
+        return {"status": "success", "file_path": file_path}
+    except Exception as e:
+        print(f"Error saving full recording: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import socket
+
+    HOST = "0.0.0.0"
+    DEFAULT_PORT = int(os.getenv("PORT", 8000))
+
+    def find_available_port(start_port: int, max_tries: int = 100) -> int:
+        """Try to bind to ports starting at start_port and return the first available one."""
+        for port in range(start_port, start_port + max_tries):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                # Try binding to the candidate port to check availability
+                s.bind((HOST, port))
+                s.close()
+                return port
+            except OSError:
+                s.close()
+                continue
+        raise RuntimeError(f"No available ports found in range {start_port}-{start_port + max_tries - 1}")
+
+    port_to_use = find_available_port(DEFAULT_PORT)
+    if port_to_use != DEFAULT_PORT:
+        print(f"Port {DEFAULT_PORT} is in use; starting server on available port {port_to_use} instead.")
+
+    uvicorn.run(app, host=HOST, port=port_to_use)
