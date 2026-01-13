@@ -103,12 +103,12 @@ Format:
 
         result = json.loads(content[start:end])
 
-        # Safety Check: If answer is too short (< 5 words) and score is high, force it down.
-        # This prevents the AI from scoring its own "Suggested Answer".
-        if len(answer.split()) < 5 and result.get("overall_score", 0) > 40:
+        # Safety Check: If answer is too short (< 15 words) and score is high, force it down.
+        # This prevents the AI from scoring its own "Suggested Answer" or giving credit for empty greetings.
+        if len(answer.split()) < 15 and result.get("overall_score", 0) > 40:
             result["overall_score"] = 10
             if "too short" not in result.get("feedback", "").lower():
-                 result["feedback"] = "Your answer was too short. " + result.get("feedback", "")
+                 result["feedback"] = "Your answer was too short to be evaluated properly. Please provide a more detailed response. " + result.get("feedback", "")
         
         return result
 

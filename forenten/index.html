@@ -33,9 +33,9 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 98vw;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 1rem;
         }
 
         h1 {
@@ -53,9 +53,57 @@
             align-items: start;
         }
 
+        /* Responsive Design / Adaptability */
+        @media (max-width: 1024px) {
+            .container {
+                max-width: 100vw;
+                padding: 1rem;
+            }
+        }
+
         @media (max-width: 768px) {
+
+            /* Mobile & Tablet Portrait */
+            h1 {
+                font-size: 1.75rem;
+                margin-bottom: 1.5rem;
+            }
+
             #interviewSection {
                 grid-template-columns: 1fr;
+                /* Stack columns */
+                gap: 1.5rem;
+            }
+
+            .card {
+                padding: 1rem;
+            }
+
+            /* Make buttons touch-friendly */
+            .btn {
+                padding: 12px 16px;
+                flex: 1;
+                /* Stretch buttons */
+                font-size: 0.95rem;
+            }
+
+            .controls {
+                flex-wrap: wrap;
+                gap: 0.8rem;
+            }
+
+            /* Adjust header for small screens */
+            .question-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            /* Ensure video doesn't overflow */
+            .video-container {
+                width: 100%;
+                max-height: 60vh;
+                /* Prevent taking up too much vertical space */
             }
         }
 
@@ -249,6 +297,58 @@
         .question-difficulty {
             background: #dcfce7;
             color: #166534;
+        }
+
+        /* Disclaimer Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            text-align: left;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .modal-content h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .modal-content ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .modal-content li {
+            background: #f3f4f6;
+            margin: 12px 0;
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 5px solid var(--primary-color);
+            font-size: 1.1rem;
+        }
+
+        .modal-content li strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #1f2937;
         }
     </style>
     <!-- Face Detection Scripts -->
@@ -450,6 +550,8 @@
                 Your browser does not support the video tag.
             </video>
             <a id="downloadLink" class="btn" style="margin-top: 10px; display: inline-block;">Download Recording</a>
+            <button onclick="downloadReport()" class="btn btn-primary" style="margin-top: 10px; margin-left:10px;">📄
+                Download Report PDF</button>
         </div>
 
         <button onclick="location.reload()" class="btn btn-primary">Start New Interview</button>
@@ -633,6 +735,32 @@
         let videoRecorder = null;
         let isSkipping = false;
 
+        async function acceptDisclaimer() {
+            // Hide Modal
+            document.getElementById('disclaimerModal').classList.add('hidden');
+
+            // Show interview section
+            document.getElementById('uploadSection').classList.add('hidden');
+            document.getElementById('interviewSection').classList.remove('hidden');
+
+            // Enforce Fullscreen
+            enableFullscreen();
+
+            // Reset recording controls
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('stopButton').disabled = true;
+            document.getElementById('nextButton').disabled = true;
+
+            // Load first question (logic moved from submit handler)
+            // We assume global variables currentInterviewId and currentQuestionId are set
+            if (currentInterviewId && currentQuestionId) {
+                console.log('Loading first question:', currentInterviewId, currentQuestionId);
+                await loadQuestion(currentInterviewId, currentQuestionId);
+            } else {
+                alert("Error: Interview data missing. Please refresh.");
+            }
+        }
+
         // DOM Elements
         const uploadSection = document.getElementById('uploadSection');
         const interviewSection = document.getElementById('interviewSection');
@@ -700,11 +828,14 @@
                     window.currentInterviewId = currentInterviewId;
                     window.currentQuestionId = currentQuestionId;
 
+                    // Show Disclaimer Modal instead of starting directly
+                    document.getElementById('disclaimerModal').classList.remove('hidden');
+
+                    /* WE MOVED START LOGIC TO acceptDisclaimer()
                     // Show interview section
                     document.getElementById('uploadSection').classList.add('hidden');
                     document.getElementById('interviewSection').classList.remove('hidden');
-
-
+                    
                     // Reset recording controls
                     document.getElementById('startButton').disabled = false;
                     document.getElementById('stopButton').disabled = true;
@@ -717,6 +848,7 @@
                     } else {
                         throw new Error('No questions available in the response');
                     }
+                    */
                 } catch (error) {
                     console.error('Error:', error);
                     statusDiv.textContent = 'Error: ' + error.message;
@@ -951,6 +1083,10 @@
                 await videoRecorder.startRecording();
                 console.log("Recording started successfully.");
 
+                if (window.mediaStream) {
+                    startAudioVisualizer(window.mediaStream);
+                }
+
             } catch (error) {
                 console.error('Error starting recording:', error);
                 showError(
@@ -971,6 +1107,8 @@
             }
 
             try {
+                stopAudioVisualizer(); // Stop visualizer
+
                 await videoRecorder.stopRecording();
 
                 document.getElementById('startButton').disabled = false;
@@ -1268,6 +1406,23 @@
 
 
 </body>
+<!-- Disclaimer Modal -->
+<div id="disclaimerModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h2>📋 Interview Guidelines</h2>
+        <ul>
+            <li><strong>🔊 Speak Loudly</strong> Ensure your microphone is clear and voice is audible.</li>
+            <li><strong>🤫 Maintain Silence</strong> Find a quiet room to minimize background noise.</li>
+            <li><strong>🚫 No Cheating</strong> Eye contact and face visibility are monitored strictly.</li>
+            <li><strong>🖼️ Plain Background</strong> Use a simple background to help AI face detection.</li>
+        </ul>
+        <div style="margin-top: 25px; text-align: center;">
+            <button onclick="acceptDisclaimer()" class="btn btn-primary"
+                style="width: 100%; padding: 15px; font-size: 1.2rem;">I Understand & Start Interview</button>
+        </div>
+    </div>
+</div>
+
 <!-- Fullscreen Warning Overlay -->
 <div id="fullscreenWarning"
     style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; color: white; text-align: center;">
@@ -1421,7 +1576,12 @@
         if (!faceModel) {
             console.log("Loading Face Detection Model...");
             try {
-                faceModel = await blazeface.load();
+                // Load with lower threshold to detect faces further away or in background
+                faceModel = await blazeface.load({
+                    maxFaces: 10,
+                    scoreThreshold: 0.5,
+                    iouThreshold: 0.3
+                });
                 console.log("Face Model Loaded ✅");
             } catch (e) {
                 console.error("Failed to load face model", e);
@@ -1467,6 +1627,28 @@
                         end[0] > videoWidth - margin || end[1] > videoHeight - margin
                     ) {
                         warningMsg = "PARTIAL FACE - CENTER YOURSELF";
+                    }
+                    // 3. Eye Contact / Gaze Check (Approximation using Face Orientation)
+                    else if (pred.landmarks) {
+                        const rightEye = pred.landmarks[0]; // User's Right Eye (Camera Left)
+                        const leftEye = pred.landmarks[1];  // User's Left Eye (Camera Right)
+                        const nose = pred.landmarks[2];     // Nose Tip
+
+                        // Calculate eye midpoint along X-axis
+                        const eyeMidX = (rightEye[0] + leftEye[0]) / 2;
+
+                        // Calculate distance between eyes (to normalize for distance from camera)
+                        const eyeDist = Math.abs(rightEye[0] - leftEye[0]);
+
+                        // Check Nose deviation from center
+                        // If you look straight, nose is centered between eyes.
+                        // If you look Left/Right, nose moves closer to one eye.
+                        const noseDevX = Math.abs(nose[0] - eyeMidX);
+
+                        // Tuning Threshold: 0.4 to 0.5 is a reasonable range for "looking away"
+                        if (noseDevX > (eyeDist * 0.45)) {
+                            warningMsg = "MAINTAIN EYE CONTACT";
+                        }
                     }
                 }
 
@@ -1558,6 +1740,108 @@
 
             fullSessionRecorder.stop();
         });
+    }
+
+    let audioContext = null;
+    let analyser = null;
+    let dataArray = null;
+    let visualizerFrame = null;
+
+    function startAudioVisualizer(stream) {
+        const canvas = document.getElementById("audioVisualizer");
+        if (!canvas) return;
+        const canvasCtx = canvas.getContext("2d");
+
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Check if stream has audio tracks
+        if (stream.getAudioTracks().length === 0) {
+            console.warn("No audio tracks in stream for visualizer");
+            return;
+        }
+
+        const source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+
+        function draw() {
+            visualizerFrame = requestAnimationFrame(draw);
+            analyser.getByteTimeDomainData(dataArray);
+
+            // Clear with background color
+            canvasCtx.fillStyle = "#e5e7eb";
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = "#4f46e5"; // Primary color
+            canvasCtx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if (i === 0) canvasCtx.moveTo(x, y);
+                else canvasCtx.lineTo(x, y);
+
+                x += sliceWidth;
+            }
+
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            canvasCtx.stroke();
+        }
+
+        draw();
+    }
+
+    function stopAudioVisualizer() {
+        if (visualizerFrame) {
+            cancelAnimationFrame(visualizerFrame);
+            visualizerFrame = null;
+        }
+        const canvas = document.getElementById("audioVisualizer");
+        if (canvas) {
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#e5e7eb";
+            ctx.fillRect(0, 0, canvas.width, canvas.height); // Reset to blank/bg
+        }
+    }
+
+    async function downloadReport() {
+        if (!currentInterviewId) {
+            alert("Error: No interview found.");
+            return;
+        }
+
+        showStatus("Generating report... 📄", "info");
+
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/generate-report/${currentInterviewId}`);
+            if (!response.ok) throw new Error("Failed to generate report");
+
+            const data = await response.json();
+
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = data.download_url;
+            link.download = `Report_${currentInterviewId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showStatus("Report downloaded successfully! ✅", "success");
+        } catch (error) {
+            console.error(error);
+            showStatus("Error generating report: " + error.message, "error");
+        }
     }
 </script>
 

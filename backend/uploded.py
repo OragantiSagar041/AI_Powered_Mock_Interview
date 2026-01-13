@@ -1017,6 +1017,104 @@ async def upload_full_recording(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+@app.get("/generate-report/{interview_id}")
+def generate_report(interview_id: str):
+    # Fetch interview data
+    cursor.execute("SELECT source, created_at, profile_text FROM interviews WHERE id = ?", (interview_id,))
+    interview_data = cursor.fetchone()
+    if not interview_data:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    source, date, profile_text = interview_data
+    
+    # Fetch Q&A data
+    cursor.execute("""
+        SELECT question_text, answer_text, ai_score, ai_feedback, corrected_answer 
+        FROM answers 
+        WHERE interview_id = ? 
+        ORDER BY question_id ASC
+    """, (interview_id,))
+    answers = cursor.fetchall()
+    
+    # Generate PDF
+    pdf_filename = f"Interview_Report_{interview_id}.pdf"
+    file_path = os.path.join(UPLOAD_FOLDER, pdf_filename)
+    
+    doc = SimpleDocTemplate(file_path, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Title
+    title_style = styles['Title']
+    story.append(Paragraph(f"Interview Report", title_style))
+    story.append(Spacer(1, 12))
+    
+    # Meta Info
+    normal_style = styles['Normal']
+    story.append(Paragraph(f"<b>Interview ID:</b> {interview_id}", normal_style))
+    story.append(Paragraph(f"<b>Date:</b> {date}", normal_style))
+    story.append(Paragraph(f"<b>Source:</b> {source}", normal_style))
+    story.append(Spacer(1, 12))
+    
+    # Calculate Average Score
+    if answers:
+        scores = [row[2] for row in answers if row[2] is not None]
+        avg_score = sum(scores) / len(scores) if scores else 0
+        
+        # Color code overall score
+        color = "green" if avg_score >= 60 else "orange" if avg_score >= 40 else "red"
+        story.append(Paragraph(f"<b>Overall Score:</b> <font color='{color}' size='14'>{avg_score:.1f}/100</font>", normal_style))
+    else:
+        story.append(Paragraph("<b>Overall Score:</b> N/A", normal_style))
+    
+    story.append(Spacer(1, 20))
+    
+    # Q&A Details
+    for i, row in enumerate(answers):
+        q_text, a_text, score, feedback, verified_answer = row
+        
+        # Question Header
+        story.append(Paragraph(f"<b>Q{i+1}: {q_text}</b>", styles['Heading3']))
+        story.append(Spacer(1, 5))
+        
+        # Your Answer
+        a_text_disp = a_text if a_text else "(No answer recorded)"
+        story.append(Paragraph(f"<b>Your Answer:</b> {a_text_disp}", normal_style))
+        story.append(Spacer(1, 5))
+        
+        # AI Feedback & Score
+        score_str = f"{score}/100" if score is not None else "N/A"
+        feedback_str = feedback if feedback else "No feedback provided."
+        
+        # Color score (Green > 60, Red < 60)
+        score_color = "green" if (score and score >= 60) else "red"
+        
+        story.append(Paragraph(f"<b>Score:</b> <font color='{score_color}'><b>{score_str}</b></font>", normal_style))
+        story.append(Paragraph(f"<b>Feedback:</b> {feedback_str}", normal_style))
+        
+        # Suggested Answer (if verified answer exists and is different/better)
+        if verified_answer:
+             story.append(Spacer(1, 5))
+             story.append(Paragraph(f"<b>Suggested/Corrected Answer:</b>", normal_style))
+             story.append(Paragraph(f"<i>{verified_answer}</i>", normal_style))
+             
+        story.append(Spacer(1, 15))
+        story.append(Paragraph("<hr width='100%'/>", normal_style)) # Separator using simplified HR if supported or just lines
+        # Reportlab doesn't support <hr> well in Paragraph, use drawing or character separator
+        # story.append(Paragraph("_" * 80, normal_style)) 
+        
+        story.append(Spacer(1, 15))
+
+    doc.build(story)
+    
+    return {"status": "success", "file_path": file_path, "download_url": f"http://127.0.0.1:8000/uploads/{pdf_filename}"}
+
 if __name__ == "__main__":
     import uvicorn
     import socket
