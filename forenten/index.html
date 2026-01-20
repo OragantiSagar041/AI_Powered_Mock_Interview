@@ -477,7 +477,11 @@
 
                 </div>
 
-                <div class="controls">
+                <div class="controls"
+                    style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem; padding: 1rem; background: #ffffff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                    <div id="timerDisplay"
+                        style="font-size: 1.5rem; font-weight: bold; color: #374151; font-family: monospace; border: 2px solid #e5e7eb; padding: 4px 12px; border-radius: 6px; background: #f9fafb;">
+                        00:00</div>
                     <button id="startButton" class="btn btn-primary" title="Start Recording">
                         ● Record
                     </button>
@@ -735,6 +739,10 @@
         let videoRecorder = null;
         let isSkipping = false;
 
+        // CONFIGURATION: Change this to your Render URL after deployment
+        // e.g. "https://your-app-name.onrender.com"
+        const API_BASE_URL = "http://127.0.0.1:8000";
+
         async function acceptDisclaimer() {
             // Hide Modal
             document.getElementById('disclaimerModal').classList.add('hidden');
@@ -801,7 +809,7 @@
                     formData.append('source', 'resume');
 
                     console.log('Sending file to /upload-resume...');
-                    const response = await fetch('http://127.0.0.1:8000/upload-resume', {
+                    const response = await fetch(`${API_BASE_URL}/upload-resume`, {
                         method: 'POST',
                         body: formData,
                         credentials: 'include',  // Important for CORS
@@ -887,7 +895,7 @@
                 showStatus('Starting interview...', 'info');
 
                 console.log('Sending interview start request...');
-                const response = await fetch('http://127.0.0.1:8000/start-interview', {
+                const response = await fetch(`${API_BASE_URL}/start-interview`, {
                     method: 'POST',
                     body: formData
                 });
@@ -949,7 +957,7 @@
                 document.getElementById('skipButton').style.display = 'inline-block';
                 document.getElementById('skipButton').disabled = false;
 
-                const response = await fetch(`http://127.0.0.1:8000/interview/${interviewId}/question/${questionId}`);
+                const response = await fetch(`${API_BASE_URL}/interview/${interviewId}/question/${questionId}`);
                 if (!response.ok) {
                     throw new Error('Failed to load question');
                 }
@@ -1085,6 +1093,7 @@
 
                 if (window.mediaStream) {
                     startAudioVisualizer(window.mediaStream);
+                    startRecordingTimer(); // Start the timer
                 }
 
             } catch (error) {
@@ -1108,6 +1117,7 @@
 
             try {
                 stopAudioVisualizer(); // Stop visualizer
+                stopRecordingTimer();  // Stop timer
 
                 await videoRecorder.stopRecording();
 
@@ -1145,7 +1155,7 @@
                 if (currentAnswer.length > 20) {
                     showStatus("Thinking of a follow-up question based on your answer...", "info");
                     try {
-                        const response = await fetch("http://127.0.0.1:8000/generate-next-question", {
+                        const response = await fetch(`${API_BASE_URL}/generate-next-question`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
@@ -1213,7 +1223,7 @@
             formData.append("answer_text", answerText);
 
             try {
-                await fetch("http://127.0.0.1:8000/save-answer", {
+                await fetch(`${API_BASE_URL}/save-answer`, {
                     method: "POST",
                     body: formData
                 });
@@ -1290,7 +1300,7 @@
             document.getElementById("transcription").textContent = "⏳ Transcribing...";
 
             try {
-                const response = await fetch("http://127.0.0.1:8000/transcribe", {
+                const response = await fetch(`${API_BASE_URL}/transcribe`, {
                     method: "POST",
                     body: formData
                 });
@@ -1340,7 +1350,7 @@
             showStatus("Analyzing answer...", "info");
 
             try {
-                const response = await fetch("http://127.0.0.1:8000/analyze-answer", {
+                const response = await fetch(`${API_BASE_URL}/analyze-answer`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -1697,7 +1707,7 @@
 
                     // showStatus("Uploading full interview video... Please wait.", "info");
 
-                    const response = await fetch('http://127.0.0.1:8000/upload-full-recording', {
+                    const response = await fetch(`${API_BASE_URL}/upload-full-recording`, {
                         method: 'POST',
                         body: formData
                     });
@@ -1710,7 +1720,7 @@
                         const normalizedPath = data.file_path.replace(/\\/g, '/');
                         // Ensure path starts with 'uploads/' (it should, based on backend)
                         // Backend returns 'uploads/recordings/...'
-                        const videoUrl = `http://127.0.0.1:8000/${normalizedPath}`;
+                        const videoUrl = `${API_BASE_URL}/${normalizedPath}`;
 
                         const videoPlayer = document.getElementById('fullSessionVideo');
                         const downloadLink = document.getElementById('downloadLink');
@@ -1740,6 +1750,47 @@
 
             fullSessionRecorder.stop();
         });
+    }
+
+    // --- TIMER LOGIC ---
+    let recordingStartTime = 0;
+    let recordingTimerInterval = null;
+
+    function startRecordingTimer() {
+        // Reset
+        if (recordingTimerInterval) clearInterval(recordingTimerInterval);
+        recordingStartTime = Date.now();
+
+        const display = document.getElementById("timerDisplay");
+        if (display) {
+            display.innerText = "00:00";
+            display.style.color = "#ef4444"; // Red to show active
+            display.style.borderColor = "#ef4444";
+            display.style.background = "#fff1f2";
+        }
+
+        recordingTimerInterval = setInterval(() => {
+            const now = Date.now();
+            const diff = Math.floor((now - recordingStartTime) / 1000);
+
+            const minutes = Math.floor(diff / 60).toString().padStart(2, '0');
+            const seconds = (diff % 60).toString().padStart(2, '0');
+
+            if (display) display.innerText = `${minutes}:${seconds}`;
+        }, 1000);
+    }
+
+    function stopRecordingTimer() {
+        if (recordingTimerInterval) {
+            clearInterval(recordingTimerInterval);
+            recordingTimerInterval = null;
+        }
+        const display = document.getElementById("timerDisplay");
+        if (display) {
+            display.style.color = "#374151"; // Back to normal color
+            display.style.borderColor = "#e5e7eb";
+            display.style.background = "#f9fafb";
+        }
     }
 
     let audioContext = null;
@@ -1824,7 +1875,7 @@
         showStatus("Generating report... 📄", "info");
 
         try {
-            const response = await fetch(`http://127.0.0.1:8000/generate-report/${currentInterviewId}`);
+            const response = await fetch(`${API_BASE_URL}/generate-report/${currentInterviewId}`);
             if (!response.ok) throw new Error("Failed to generate report");
 
             const data = await response.json();
