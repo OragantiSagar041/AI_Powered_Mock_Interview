@@ -812,7 +812,6 @@
                     const response = await fetch(`${API_BASE_URL}/upload-resume`, {
                         method: 'POST',
                         body: formData,
-                        credentials: 'include',  // Important for CORS
                         headers: {
                             'Accept': 'application/json'
                         }
