@@ -36,6 +36,29 @@ CREATE TABLE IF NOT EXISTS answers (
 )
 """)
 
+# Admins
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT,
+    created_at TEXT
+)
+""")
+
+# Pre-created Interview Sessions (for Admin generated links)
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS interview_sessions (
+    link_id TEXT PRIMARY KEY,
+    candidate_name TEXT,
+    resume_text TEXT,
+    job_description TEXT,
+    status TEXT DEFAULT 'pending',
+    created_by INTEGER,
+    created_at TEXT
+)
+""")
+
 # 🔹 ADD AI COLUMNS (SAFE)
 def add_column_if_not_exists(table, column, datatype):
     try:

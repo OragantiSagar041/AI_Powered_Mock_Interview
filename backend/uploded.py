@@ -1109,6 +1109,148 @@ def generate_report(interview_id: str):
     
     return {"status": "success", "file_path": file_path, "download_url": f"http://127.0.0.1:8000/uploads/{pdf_filename}"}
 
+# --------------------------------------------------------------------------------
+# ADMIN & SESSION MANAGEMENT APIs
+# --------------------------------------------------------------------------------
+
+import hashlib
+
+class AdminLogin(BaseModel):
+    username: str
+    password: str
+
+class CreateSession(BaseModel):
+    candidate_name: str
+    resume_text: str
+    job_description: str
+    admin_id: int
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+@app.on_event("startup")
+def startup_event():
+    # Create default admin if not exists
+    try:
+        cursor.execute("SELECT * FROM admins WHERE username = ?", ("admin",))
+        if not cursor.fetchone():
+            hashed_pw = hash_password("admin123")
+            cursor.execute(
+                "INSERT INTO admins (username, password, created_at) VALUES (?, ?, ?)",
+                ("admin", hashed_pw, datetime.now().isoformat())
+            )
+            conn.commit()
+            print("Default admin created: admin / admin123")
+    except Exception as e:
+        print(f"Error checking/creating admin: {e}")
+
+@app.post("/admin/login")
+async def admin_login(data: AdminLogin):
+    hashed_pw = hash_password(data.password)
+    cursor.execute("SELECT id, username FROM admins WHERE username = ? AND password = ?", (data.username, hashed_pw))
+    user = cursor.fetchone()
+    if user:
+        return {"status": "success", "admin_id": user[0], "username": user[1]}
+    else:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+@app.post("/admin/parse-resume")
+async def parse_resume(file: UploadFile = File(...)):
+    content = await file.read()
+    text = extract_text_from_file(content, file.filename)
+    return {"status": "success", "text": text}
+
+@app.post("/admin/create-session")
+async def create_session(data: CreateSession):
+    link_id = str(uuid.uuid4())
+    cursor.execute(
+        """INSERT INTO interview_sessions 
+           (link_id, candidate_name, resume_text, job_description, created_by, created_at) 
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (link_id, data.candidate_name, data.resume_text, data.job_description, data.admin_id, datetime.now().isoformat())
+    )
+    conn.commit()
+    # Assuming the frontend is served at the root or configured domain
+    return {"status": "success", "link_id": link_id, "link_url": f"?session_id={link_id}"}
+
+@app.get("/session/{link_id}")
+async def get_session(link_id: str):
+    cursor.execute("SELECT candidate_name, resume_text, job_description, status FROM interview_sessions WHERE link_id = ?", (link_id,))
+    row = cursor.fetchone()
+    if row:
+        return {
+            "status": "success",
+            "candidate_name": row[0],
+            "resume_text": row[1],
+            "job_description": row[2],
+            "session_status": row[3]
+        }
+    else:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+@app.post("/start-session-interview")
+async def start_session_interview(link_id: str = Form(...)):
+    cursor.execute("SELECT candidate_name, resume_text, job_description, status FROM interview_sessions WHERE link_id = ?", (link_id,))
+    row = cursor.fetchone()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    candidate_name, resume_text, job_description, status = row
+    
+    # Generate Questions
+    # source priority: JD if exists, else Resume
+    source = "job_description" if job_description and len(job_description) > 50 else "resume"
+    content_str = job_description if source == "job_description" else resume_text
+    
+    # We also want to analyze the profile
+    profile_analysis = analyze_resume_or_jd(content_str)
+    
+    questions = generate_mock_questions(content_str, source)
+    
+    if not questions:
+        raise HTTPException(status_code=400, detail="Failed to generate questions")
+
+    interview_id = f"int_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
+
+    # Store interview data (RAM)
+    interviews[interview_id] = {
+        "id": interview_id,
+        "source": source,
+        "profile_text": content_str[:5000],
+        "profile_analysis": profile_analysis,
+        "questions": questions,
+        "answers": {},
+        "created_at": datetime.now().isoformat(),
+        "candidate_name": candidate_name
+    }
+    
+    # Store interview data (DB)
+    try:
+        cursor.execute("""
+            INSERT INTO interviews (id, source, profile_text, questions, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            interview_id, 
+            source, 
+            content_str[:5000], 
+            json.dumps(questions), 
+            datetime.now().isoformat()
+        ))
+        
+        # Update session status
+        cursor.execute("UPDATE interview_sessions SET status = 'started' WHERE link_id = ?", (link_id,))
+        conn.commit()
+    except Exception as db_e:
+        print(f"⚠️ DB Save Error: {db_e}")
+        
+    return {
+        "interview_id": interview_id,
+        "total_questions": len(questions),
+        "first_question": questions[0],
+        "candidate_name": candidate_name
+    }
+
 if __name__ == "__main__":
     import uvicorn
     import socket

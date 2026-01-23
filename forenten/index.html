@@ -578,7 +578,7 @@
     <script>
         let mediaStream = null;
         //let chunks = []; // Stores the audio/video data
-        //const API_BASE = "http://127.0.0.1:8000"; // Your FastAPI URL
+        //const API_BASE_URL = "http://127.0.0.1:8000"; // Removed duplicate
         const resumeInput = document.getElementById("resumeFile");
         const jdInput = document.getElementById("jobDescription");
 
@@ -809,7 +809,9 @@
 
         // CONFIGURATION: Change this to your Render URL after deployment
         // e.g. "https://your-app-name.onrender.com"
-        const API_BASE_URL = "https://ai-powered-mock-interview-cpck.onrender.com";
+        const API_BASE_URL = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+            ? "http://127.0.0.1:8000"
+            : "https://ai-powered-mock-interview-cpck.onrender.com";
 
         async function acceptDisclaimer() {
             // Hide Modal
@@ -848,7 +850,61 @@
 
 
         // Event Listeners
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+
+            // --- SESSION LINK HANDLER ---
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session_id') || urlParams.get('session');
+
+            if (sessionId) {
+                console.log("Found session ID:", sessionId);
+                document.getElementById('uploadSection').classList.add('hidden');
+
+                const statusDiv = document.getElementById('status');
+                if (statusDiv) {
+                    statusDiv.textContent = 'Loading interview session...';
+                    statusDiv.className = 'status info';
+                    statusDiv.style.display = 'block';
+                }
+
+                try {
+                    const formData = new FormData();
+                    formData.append('link_id', sessionId);
+
+                    const response = await fetch(`${API_BASE_URL}/start-session-interview`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('Session started:', data);
+
+                        currentInterviewId = data.interview_id;
+                        currentQuestionId = data.first_question.id;
+                        totalQuestions = data.total_questions;
+
+                        window.currentInterviewId = currentInterviewId;
+                        window.currentQuestionId = currentQuestionId;
+
+                        // personalized welcome
+                        if (data.candidate_name) {
+                            const header = document.querySelector('h1');
+                            if (header) header.textContent = `Welcome, ${data.candidate_name}`;
+                        }
+
+                        // Show Disclaimer
+                        document.getElementById('disclaimerModal').classList.remove('hidden');
+                    } else {
+                        throw new Error("Invalid or expired link");
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Error loading session: " + e.message);
+                    document.getElementById('uploadSection').classList.remove('hidden');
+                }
+            }
+
             // Skip button click handler
             document.getElementById('skipButton').addEventListener('click', skipQuestion);
             // Resume form submission

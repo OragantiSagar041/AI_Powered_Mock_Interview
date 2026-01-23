@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Interview Admin</title>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --danger-color: #ef4444;
+            --background: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        h1,
+        h2 {
+            color: var(--primary-color);
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="file"],
+        textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+
+        button.btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+        }
+
+        button.btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .session-item {
+            border: 1px solid #e5e7eb;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            background: #f9fafb;
+        }
+
+        .session-item strong {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--primary-color);
+        }
+
+        .copy-btn {
+            background-color: #10b981;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            padding: 0.5rem;
+        }
+
+        .copy-btn:hover {
+            background-color: #059669;
+        }
+
+        #loginSection {
+            max-width: 400px;
+            margin: 4rem auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- Login Section -->
+        <div id="loginSection" class="card">
+            <h1>Admin Login</h1>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="admin">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="••••••••">
+            </div>
+            <button class="btn" onclick="login()">Login</button>
+            <p id="loginError" style="color: var(--danger-color); display: none; margin-top: 1rem; text-align: center;">
+            </p>
+        </div>
+
+        <!-- Dashboard Section -->
+        <div id="dashboardSection" class="hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h1>Admin Dashboard</h1>
+                <button class="btn" onclick="logout()"
+                    style="width: auto; background-color: var(--text-muted);">Logout</button>
+            </div>
+
+            <!-- Create Session Card -->
+            <div class="card">
+                <h2>Create Interview Session</h2>
+                <div class="form-group">
+                    <label for="candidateName">Candidate Name</label>
+                    <input type="text" id="candidateName" placeholder="John Doe">
+                </div>
+
+                <div class="form-group">
+                    <label for="resumeFile">Upload Resume (PDF/DOCX/TXT)</label>
+                    <input type="file" id="resumeFile" accept=".pdf,.docx,.doc,.txt" onchange="handleFileSelect()">
+                    <p id="fileStatus" style="font-size: 0.9rem; color: var(--text-muted); margin-top: 5px;"></p>
+                </div>
+
+                <div class="form-group">
+                    <label for="resumeText">Resume Text (Parsed)</label>
+                    <textarea id="resumeText" placeholder="Resume content will appear here..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="jobDescription">Job Description</label>
+                    <textarea id="jobDescription" placeholder="Paste job description here..."></textarea>
+                </div>
+
+                <button class="btn" onclick="createSession()" id="createBtn">Generate Link</button>
+            </div>
+
+            <!-- Generated Links Card -->
+            <div class="card">
+                <h2>Generated Links</h2>
+                <div id="linksList">
+                    <!-- Links will be added here -->
+                    <p style="text-align: center; color: var(--text-muted);">No links generated yet this session.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURATION: Match this with index.html
+        const API_BASE = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+            ? "http://127.0.0.1:8000"
+            : "https://ai-powered-mock-interview-cpck.onrender.com";
+
+        let adminId = null;
+
+        document.getElementById('password').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') login();
+        });
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('loginError');
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    adminId = data.admin_id;
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('dashboardSection').classList.remove('hidden');
+                    errorMsg.style.display = 'none';
+                } else {
+                    errorMsg.textContent = "Invalid credentials";
+                    errorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                console.error("Login error:", error);
+                errorMsg.textContent = "Server connection failed";
+                errorMsg.style.display = 'block';
+            }
+        }
+
+        function logout() {
+            location.reload();
+        }
+
+        async function handleFileSelect() {
+            const fileInput = document.getElementById('resumeFile');
+            const file = fileInput.files[0];
+            const status = document.getElementById('fileStatus');
+            const textArea = document.getElementById('resumeText');
+
+            if (!file) return;
+
+            status.textContent = "Parsing...";
+            textArea.value = "Parsing resume...";
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/parse-resume`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    textArea.value = data.text;
+                    status.textContent = "Parsed successfully!";
+                    status.style.color = "var(--success-color)";
+                } else {
+                    textArea.value = "";
+                    status.textContent = "Error parsing file.";
+                    status.style.color = "var(--danger-color)";
+                }
+            } catch (error) {
+                console.error(error);
+                status.textContent = "Error connecting to server.";
+            }
+        }
+
+        async function createSession() {
+            const name = document.getElementById('candidateName').value;
+            const resume = document.getElementById('resumeText').value;
+            const jd = document.getElementById('jobDescription').value;
+            const createBtn = document.getElementById('createBtn');
+
+            if (!name || !resume || !jd) {
+                alert("Please fill in all fields.");
+                return;
+            }
+
+            createBtn.disabled = true;
+            createBtn.textContent = "Generating...";
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/create-session`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        candidate_name: name,
+                        resume_text: resume,
+                        job_description: jd,
+                        admin_id: adminId
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addSessionToUI(name, data.link_url, data.link_id);
+                    // Clear form
+                    document.getElementById('candidateName').value = '';
+                    document.getElementById('resumeFile').value = '';
+                    document.getElementById('resumeText').value = '';
+                    document.getElementById('jobDescription').value = '';
+                    document.getElementById('fileStatus').textContent = '';
+                } else {
+                    alert("Failed to create session.");
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Error creating session.");
+            } finally {
+                createBtn.disabled = false;
+                createBtn.textContent = "Generate Link";
+            }
+        }
+
+        function addSessionToUI(name, relativeUrl, id) {
+            const list = document.getElementById('linksList');
+            // Construct full URL based on current location
+            const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/'));
+            const fullUrl = `${baseUrl}/index.html${relativeUrl}`;
+
+            // Remove placeholder if exists
+            if (list.querySelector('p')) {
+                list.innerHTML = '';
+            }
+
+            const item = document.createElement('div');
+            item.className = 'session-item';
+            item.innerHTML = `
+                <strong>Candidate: ${name}</strong>
+                <div style="font-family: monospace; background: #e5e7eb; padding: 0.5rem; word-break: break-all;">
+                    ${fullUrl}
+                </div>
+                <button class="btn copy-btn" onclick="navigator.clipboard.writeText('${fullUrl}').then(() => alert('Copied!'))">
+                    Copy Link
+                </button>
+            `;
+            list.prepend(item);
+        }
+    </script>
+</body>
+
+</html>
