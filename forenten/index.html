@@ -424,10 +424,16 @@
 
                 <div class="question-display" style="display: flex; gap: 10px; align-items: flex-start;">
                     <p id="questionText" style="flex: 1; margin: 0;">Loading question...</p>
-                    <button onclick="speakText(document.getElementById('questionText').innerText)" class="btn"
+                    <button id="readQuestionBtn" onclick="speakText(document.getElementById('questionText').innerText)"
+                        class="btn"
                         style="background:none; border: 1px solid #ccc; color: #333; padding: 5px 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
                         title="Read Question Aloud">
                         🔊
+                    </button>
+                    <button id="stopReadQuestionBtn" onclick="stopSpeaking()" class="btn"
+                        style="background:none; border: 1px solid #ef4444; color: #ef4444; padding: 5px 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; opacity: 0.5; cursor: pointer;"
+                        title="Stop Reading">
+                        🔇
                     </button>
                 </div>
 
@@ -495,6 +501,7 @@
                         style="background: var(--text-main); color: white; flex: 1;">
                         ✨ Analyze Answer
                     </button>
+                    <button id="prevButton" class="btn" style="background: #9ca3af; color: white;">⬅ Prev</button>
                     <button id="skipButton" class="btn btn-skip">Skip</button>
                     <button id="nextButton" class="btn" disabled
                         style="background: var(--success-color); color: white; flex: 1;">
@@ -574,6 +581,67 @@
         //const API_BASE = "http://127.0.0.1:8000"; // Your FastAPI URL
         const resumeInput = document.getElementById("resumeFile");
         const jdInput = document.getElementById("jobDescription");
+
+        // --- GLOBAL SPEECH SYNTHESIS CONTROL ---
+        let isSpeaking = false;
+
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                const readBtn = document.getElementById('readQuestionBtn');
+                const stopBtn = document.getElementById('stopReadQuestionBtn');
+
+                // Stop any previous speech
+                window.speechSynthesis.cancel();
+                isSpeaking = false;
+
+                if (!text) return;
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                const voices = window.speechSynthesis.getVoices();
+                const femaleVoice = voices.find(v => v.name.includes("Female") || v.name.includes("Google US English"));
+                if (femaleVoice) utterance.voice = femaleVoice;
+
+                // Track state
+                // Track state
+                utterance.onstart = () => {
+                    isSpeaking = true;
+                    if (stopBtn) {
+                        stopBtn.style.opacity = "1";
+                        stopBtn.style.cursor = "pointer";
+                    }
+                };
+                utterance.onend = () => {
+                    isSpeaking = false;
+                    if (stopBtn) {
+                        stopBtn.style.opacity = "0.5";
+                        stopBtn.style.cursor = "default";
+                    }
+                };
+                utterance.onerror = () => {
+                    isSpeaking = false;
+                    if (stopBtn) {
+                        stopBtn.style.opacity = "0.5";
+                        stopBtn.style.cursor = "default";
+                    }
+                };
+
+
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function stopSpeaking() {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                isSpeaking = false;
+
+                const stopBtn = document.getElementById('stopReadQuestionBtn');
+                if (stopBtn) {
+                    stopBtn.style.opacity = "0.5";
+                    stopBtn.style.cursor = "default";
+                }
+            }
+        }
 
         // Resume upload
         resumeInput.addEventListener("change", () => {
@@ -887,6 +955,7 @@
             document.getElementById('startButton').addEventListener('click', startRecording);
             document.getElementById('stopButton').addEventListener('click', stopRecording);
             document.getElementById('nextButton').addEventListener('click', nextQuestion);
+            document.getElementById('prevButton').addEventListener('click', prevQuestion);
         });
 
         async function startInterview(formData) {
@@ -998,8 +1067,12 @@
                 // Reset UI for new question
                 document.getElementById('startButton').disabled = false;
                 document.getElementById('stopButton').disabled = true;
-                document.getElementById('nextButton').disabled = false; // Enable next button
+                document.getElementById('nextButton').disabled = true; // Initially disabled until answer analyzed? No, let's keep it consistent with existing logic
                 document.getElementById('skipButton').disabled = false;
+
+                const prevBtn = document.getElementById('prevButton');
+                if (prevBtn) prevBtn.disabled = (questionId <= 1);
+
                 document.getElementById('status').textContent = isSkipped ? 'Question skipped. Ready to record your answer.' : 'Ready to record your answer';
 
                 // Hide the transcription container initially for new question
@@ -1133,6 +1206,30 @@
         let isListening = false;
         let finalTranscript = "";
         let lastFinalIndex = 0;
+
+        async function prevQuestion() {
+            if (currentQuestionId <= 1) return;
+
+            const prevButton = document.getElementById('prevButton');
+            prevButton.disabled = true;
+
+            // 1. Ensure recording is stopped
+            if (videoRecorder && videoRecorder.isRecording) {
+                await videoRecorder.stopRecording();
+            }
+
+            // 2. Clear transcript/feedback visuals manually before load
+            document.getElementById("transcriptionBox").value = "";
+            document.getElementById("transcription").innerText = "";
+            document.getElementById("score").innerText = "0/100";
+            document.getElementById("feedback").innerText = "-";
+
+            // 3. Load Previous Question
+            const prevQuestionId = currentQuestionId - 1;
+            // Pass 'true' or similar if we want to skip saving answer? 
+            // loadQuestion handles state reset.
+            await loadQuestion(currentInterviewId, prevQuestionId);
+        }
 
         async function nextQuestion() {
             const nextButton = document.getElementById('nextButton');
@@ -1438,8 +1535,13 @@
     <h1 style="color: #ef4444; font-size: 3rem; margin-bottom: 20px;">⚠️ Anti-Cheating Alert</h1>
     <p style="font-size: 1.5rem; margin-bottom: 30px;">Full Screen Mode is REQUIRED to continue.</p>
     <button onclick="enableFullscreen()"
-        style="padding: 15px 30px; font-size: 1.2rem; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer;">Enable
+        style="padding: 15px 30px; font-size: 1.2rem; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 15px;">Enable
         Full Screen</button>
+
+    <button onclick="exitToHome()"
+        style="padding: 12px 30px; font-size: 1rem; background: #374151; color: #fca5a5; border: 1px solid #ef4444; border-radius: 8px; cursor: pointer; margin-top: 10px;">
+        Exit Interview
+    </button>
 </div>
 
 <script>
@@ -1453,6 +1555,12 @@
             elem.webkitRequestFullscreen();
         } else if (elem.msRequestFullscreen) { /* IE11 */
             elem.msRequestFullscreen();
+        }
+    }
+
+    function exitToHome() {
+        if (confirm("Are you sure you want to end the interview? All progress will be lost.")) {
+            location.reload();
         }
     }
 
