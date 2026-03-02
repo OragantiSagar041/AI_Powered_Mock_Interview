@@ -4,191 +4,956 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mock Interview Admin</title>
+    <title>Admin Panel — Mock Interview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         :root {
-            --primary-color: #4f46e5;
-            --primary-hover: #4338ca;
-            --danger-color: #ef4444;
-            --background: #f3f4f6;
-            --card-bg: #ffffff;
-            --text-main: #1f2937;
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --primary-glow: rgba(99, 102, 241, 0.25);
+            --accent: #06d6a0;
+            --accent-dark: #05b384;
+            --danger: #f43f5e;
+            --warning: #f59e0b;
+            --bg-dark: #0f0f1a;
+            --bg-card: #1a1a2e;
+            --bg-card-hover: #1f1f35;
+            --bg-input: #16162a;
+            --border: #2d2d4a;
+            --border-focus: #6366f1;
+            --text-primary: #f1f1f8;
+            --text-secondary: #9ca3af;
             --text-muted: #6b7280;
+            --gradient-1: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
+            --gradient-2: linear-gradient(135deg, #06d6a0, #22d3ee);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+            --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.15);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+        }
+
+        [data-theme="light"] {
+            --bg-dark: #eef2f6;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f8fafc;
+            --bg-input: #f8fafc;
+            --border: #e2e8f0;
+            --border-focus: #6366f1;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.1);
+            --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.2);
+            --primary-glow: rgba(99, 102, 241, 0.15);
+        }
+
+        /* Adjust animated orbs for light mode */
+        [data-theme="light"] body::before {
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        [data-theme="light"] body::after {
+            background: rgba(6, 214, 160, 0.12);
         }
 
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            background-color: var(--background);
-            color: var(--text-main);
-            margin: 0;
-            padding: 0;
-            line-height: 1.6;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        .container {
-            max-width: 800px;
-            margin: 2rem auto;
-            padding: 2rem;
+        /* --- Background Animated Orbs --- */
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: 0;
+            pointer-events: none;
+            animation: float 15s ease-in-out infinite alternate;
         }
 
-        .card {
-            background: var(--card-bg);
-            border-radius: 12px;
+        body::before {
+            width: 500px;
+            height: 500px;
+            background: rgba(99, 102, 241, 0.08);
+            top: -100px;
+            right: -100px;
+        }
+
+        body::after {
+            width: 400px;
+            height: 400px;
+            background: rgba(6, 214, 160, 0.06);
+            bottom: -100px;
+            left: -100px;
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(30px, -30px) scale(1.1);
+            }
+
+            100% {
+                transform: translate(-20px, 20px) scale(0.95);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -200% center;
+            }
+
+            100% {
+                background-position: 200% center;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* ==================== LOGIN SECTION ==================== */
+        #loginSection {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
             padding: 2rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            padding: 3rem 2.5rem;
+            box-shadow: var(--shadow-lg), var(--shadow-glow);
+            animation: fadeInUp 0.6s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gradient-1);
+        }
+
+        .login-logo {
+            text-align: center;
             margin-bottom: 2rem;
         }
 
-        h1,
-        h2 {
-            color: var(--primary-color);
-            text-align: center;
+        .login-logo .icon {
+            width: 64px;
+            height: 64px;
+            background: var(--gradient-1);
+            border-radius: var(--radius-lg);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+        }
+
+        .login-logo h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.3rem;
+        }
+
+        .login-logo p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
         }
 
         .form-group {
             margin-bottom: 1.5rem;
         }
 
-        label {
+        .form-group label {
             display: block;
             margin-bottom: 0.5rem;
+            font-size: 0.85rem;
             font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
-        input[type="text"],
-        input[type="password"],
-        input[type="file"],
-        textarea {
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-wrapper .input-icon {
+            position: absolute;
+            top: 50%;
+            left: 14px;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            pointer-events: none;
+            transition: color 0.2s;
+        }
+
+        .input-wrapper input {
             width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            font-size: 1rem;
-            box-sizing: border-box;
+            padding: 0.85rem 1rem 0.85rem 2.8rem;
+            background: var(--bg-input);
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: all 0.25s ease;
+            outline: none;
         }
 
-        textarea {
-            height: 120px;
+        .input-wrapper input:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        .input-wrapper input:focus~.input-icon {
+            color: var(--primary-light);
+        }
+
+        .input-wrapper input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Eye Toggle Button */
+        .eye-toggle {
+            position: absolute;
+            top: 50%;
+            right: 12px;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.15rem;
+            padding: 4px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .eye-toggle:hover {
+            color: var(--primary-light);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 0.9rem;
+            background: var(--gradient-1);
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .btn-login:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-login .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .login-error {
+            background: rgba(244, 63, 94, 0.1);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            color: var(--danger);
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            text-align: center;
+            margin-top: 1rem;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        /* ==================== DASHBOARD SECTION ==================== */
+        #dashboardSection {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+            position: relative;
+            z-index: 1;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        /* Top Navigation Bar */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .top-bar .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .top-bar .brand-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--gradient-1);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .top-bar .brand-text h2 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+
+        .top-bar .brand-text span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .btn-logout {
+            padding: 0.5rem 1.2rem;
+            background: rgba(244, 63, 94, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(244, 63, 94, 0.25);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(244, 63, 94, 0.2);
+            border-color: rgba(244, 63, 94, 0.4);
+        }
+
+        /* Section Card */
+        .section-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.3s;
+        }
+
+        .section-card:hover {
+            box-shadow: var(--shadow-md);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-header .header-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .section-header .header-icon.purple {
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        .section-header .header-icon.green {
+            background: rgba(6, 214, 160, 0.15);
+        }
+
+        .section-header h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+        }
+
+        .section-header p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Dashboard Form Inputs */
+        .dash-input,
+        .dash-textarea,
+        .dash-file-input {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            background: var(--bg-input);
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.25s ease;
+        }
+
+        .dash-input:focus,
+        .dash-textarea:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        .dash-input::placeholder,
+        .dash-textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .dash-textarea {
+            min-height: 120px;
             resize: vertical;
         }
 
-        button.btn {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            width: 100%;
-            font-size: 1rem;
-            transition: background-color 0.2s;
-        }
-
-        button.btn:hover {
-            background-color: var(--primary-hover);
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .session-item {
-            border: 1px solid #e5e7eb;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            background: #f9fafb;
-        }
-
-        .session-item strong {
+        .dash-label {
             display: block;
             margin-bottom: 0.5rem;
-            color: var(--primary-color);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
         }
 
-        .copy-btn {
-            background-color: #10b981;
+        .dash-form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        /* File Upload Area */
+        .file-upload-area {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: var(--bg-input);
+        }
+
+        .file-upload-area:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .file-upload-area .upload-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-upload-area p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .file-upload-area .file-name {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .file-status {
+            font-size: 0.8rem;
             margin-top: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: var(--radius-sm);
+            display: inline-block;
+        }
+
+        .file-status.success {
+            background: rgba(6, 214, 160, 0.1);
+            color: var(--accent);
+        }
+
+        .file-status.error {
+            background: rgba(244, 63, 94, 0.1);
+            color: var(--danger);
+        }
+
+        .file-status.loading {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Generate Button */
+        .btn-generate {
+            width: 100%;
+            padding: 0.9rem;
+            background: var(--gradient-2);
+            color: var(--bg-dark);
+            font-size: 1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            margin-top: 0.5rem;
+        }
+
+        .btn-generate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(6, 214, 160, 0.3);
+        }
+
+        .btn-generate:active {
+            transform: translateY(0);
+        }
+
+        .btn-generate:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-generate .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(15, 15, 26, 0.3);
+            border-top-color: var(--bg-dark);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        /* Session Link Items */
+        .session-item {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            animation: slideIn 0.4s ease-out;
+            transition: border-color 0.2s;
+        }
+
+        .session-item:hover {
+            border-color: var(--primary);
+        }
+
+        .session-item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .session-item-header .candidate-name {
+            font-weight: 600;
+            color: var(--primary-light);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .session-item-header .candidate-name span.dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: inline-block;
+        }
+
+        .session-item-header .timestamp {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .link-display {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.8rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+            line-height: 1.5;
+        }
+
+        .btn-copy {
+            margin-top: 0.75rem;
+            padding: 0.5rem 1.2rem;
+            background: rgba(6, 214, 160, 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(6, 214, 160, 0.25);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .btn-copy:hover {
+            background: rgba(6, 214, 160, 0.2);
+            border-color: rgba(6, 214, 160, 0.4);
+        }
+
+        .btn-copy.copied {
+            background: rgba(6, 214, 160, 0.25);
+            color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2.5rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state .empty-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+            opacity: 0.5;
+        }
+
+        .empty-state p {
             font-size: 0.9rem;
-            padding: 0.5rem;
         }
 
-        .copy-btn:hover {
-            background-color: #059669;
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1rem 1.5rem;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+            animation: slideIn 0.4s ease-out;
+            font-size: 0.9rem;
         }
 
-        #loginSection {
-            max-width: 400px;
-            margin: 4rem auto;
+        .toast.success {
+            border-color: rgba(6, 214, 160, 0.4);
+        }
+
+        .toast.error {
+            border-color: rgba(244, 63, 94, 0.4);
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+            font-size: 1.2rem;
+            outline: none;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: var(--shadow-md);
+            border-color: var(--primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .login-card {
+                padding: 2rem 1.5rem;
+            }
+
+            #dashboardSection {
+                padding: 1rem;
+            }
+
+            .section-card {
+                padding: 1.25rem;
+            }
+
+            .top-bar {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
         }
     </style>
 </head>
 
 <body>
+    <!-- Script to prevent FOUC (Flash of Unstyled Content) -->
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem('adminTheme');
+            const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+            if (savedTheme === 'light' || (!savedTheme && prefersLight)) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
 
-    <div class="container">
-        <!-- Login Section -->
-        <div id="loginSection" class="card">
-            <h1>Admin Login</h1>
+    <!-- Dark/Light Mode Toggle -->
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle Theme">
+        <span id="themeIcon" style="display:inline-block; transition: transform 0.3s ease;">☀️</span>
+    </button>
+
+    <!-- ==================== LOGIN SECTION ==================== -->
+    <div id="loginSection">
+        <div class="login-card">
+            <div class="login-logo">
+                <div class="icon">🛡️</div>
+                <h1>Admin Console</h1>
+                <p>Mock Interview Management</p>
+            </div>
+
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" placeholder="admin">
+                <div class="input-wrapper">
+                    <span class="input-icon">👤</span>
+                    <input type="text" id="username" placeholder="Enter username" autocomplete="username">
+                </div>
             </div>
+
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" placeholder="••••••••">
+                <div class="input-wrapper">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="password" placeholder="Enter password" autocomplete="current-password">
+                    <button type="button" class="eye-toggle" id="eyeToggle" onclick="togglePassword()"
+                        title="Show/Hide password">
+                        <svg id="eyeOpen" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <svg id="eyeClosed" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                            <path
+                                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                        </svg>
+                    </button>
+                </div>
             </div>
-            <button class="btn" onclick="login()">Login</button>
-            <p id="loginError" style="color: var(--danger-color); display: none; margin-top: 1rem; text-align: center;">
-            </p>
+
+            <button class="btn-login" id="loginBtn" onclick="login()">
+                Sign In
+            </button>
+
+            <div id="loginError" class="login-error hidden"></div>
+        </div>
+    </div>
+
+    <!-- ==================== DASHBOARD SECTION ==================== -->
+    <div id="dashboardSection" class="hidden">
+
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="brand">
+                <div class="brand-icon">🛡️</div>
+                <div class="brand-text">
+                    <h2>Admin Console</h2>
+                    <span>Welcome back, <strong id="adminName">Admin</strong></span>
+                </div>
+            </div>
+            <button class="btn-logout" onclick="logout()">⏻ Logout</button>
         </div>
 
-        <!-- Dashboard Section -->
-        <div id="dashboardSection" class="hidden">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                <h1>Admin Dashboard</h1>
-                <button class="btn" onclick="logout()"
-                    style="width: auto; background-color: var(--text-muted);">Logout</button>
+        <!-- Create Session Card -->
+        <div class="section-card">
+            <div class="section-header">
+                <div class="header-icon purple">🎯</div>
+                <div>
+                    <h3>Create Interview Session</h3>
+                    <p>Generate a unique link for each candidate</p>
+                </div>
             </div>
 
-            <!-- Create Session Card -->
-            <div class="card">
-                <h2>Create Interview Session</h2>
-                <div class="form-group">
-                    <label for="candidateName">Candidate Name</label>
-                    <input type="text" id="candidateName" placeholder="John Doe">
-                </div>
-
-                <div class="form-group">
-                    <label for="resumeFile">Upload Resume (PDF/DOCX/TXT)</label>
-                    <input type="file" id="resumeFile" accept=".pdf,.docx,.doc,.txt" onchange="handleFileSelect()">
-                    <p id="fileStatus" style="font-size: 0.9rem; color: var(--text-muted); margin-top: 5px;"></p>
-                </div>
-
-                <div class="form-group">
-                    <label for="resumeText">Resume Text (Parsed)</label>
-                    <textarea id="resumeText" placeholder="Resume content will appear here..."></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="jobDescription">Job Description</label>
-                    <textarea id="jobDescription" placeholder="Paste job description here..."></textarea>
-                </div>
-
-                <button class="btn" onclick="createSession()" id="createBtn">Generate Link</button>
+            <div class="dash-form-group">
+                <label class="dash-label">Candidate Name</label>
+                <input type="text" class="dash-input" id="candidateName" placeholder="e.g. John Doe">
             </div>
 
-            <!-- Generated Links Card -->
-            <div class="card">
-                <h2>Generated Links</h2>
-                <div id="linksList">
-                    <!-- Links will be added here -->
-                    <p style="text-align: center; color: var(--text-muted);">No links generated yet this session.</p>
+            <div class="dash-form-group">
+                <label class="dash-label">Upload Resume (PDF / DOCX / TXT)</label>
+                <div class="file-upload-area" id="fileDropZone" onclick="document.getElementById('resumeFile').click()">
+                    <div class="upload-icon">📄</div>
+                    <p id="fileLabel">Click to upload or drag and drop</p>
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">PDF, DOCX, TXT — Max 5MB</p>
+                </div>
+                <input type="file" id="resumeFile" accept=".pdf,.docx,.doc,.txt" onchange="handleFileSelect()"
+                    style="display:none;">
+                <div id="fileStatus"></div>
+            </div>
+
+            <input type="hidden" id="resumeText" value="">
+
+            <div class="dash-form-group">
+                <label class="dash-label">Job Description</label>
+                <textarea class="dash-textarea" id="jobDescription"
+                    placeholder="Paste the job description here..."></textarea>
+            </div>
+
+            <button class="btn-generate" id="createBtn" onclick="createSession()">
+                ⚡ Generate Interview Link
+            </button>
+        </div>
+
+        <!-- Generated Links Card -->
+        <div class="section-card">
+            <div class="section-header">
+                <div class="header-icon green">🔗</div>
+                <div>
+                    <h3>Generated Links</h3>
+                    <p>Share these with candidates to start interviews</p>
+                </div>
+            </div>
+
+            <div id="linksList">
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <p>No interview links generated yet.</p>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer"></div>
 
     <script>
         // CONFIGURATION: Match this with index.html
@@ -198,53 +963,142 @@
 
         let adminId = null;
 
-        document.getElementById('password').addEventListener('keypress', function (e) {
+        // --- PASSWORD TOGGLE ---
+        function togglePassword() {
+            const pwInput = document.getElementById('password');
+            const eyeOpen = document.getElementById('eyeOpen');
+            const eyeClosed = document.getElementById('eyeClosed');
+
+            if (pwInput.type === 'password') {
+                pwInput.type = 'text';
+                eyeOpen.style.display = 'none';
+                eyeClosed.style.display = 'block';
+            } else {
+                pwInput.type = 'password';
+                eyeOpen.style.display = 'block';
+                eyeClosed.style.display = 'none';
+            }
+        }
+
+        // --- ENTER KEY SUPPORT ---
+        document.getElementById('password').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') login();
         });
+        document.getElementById('username').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('password').focus();
+        });
 
+        // --- LOGIN ---
         async function login() {
-            const username = document.getElementById('username').value;
+            const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
-            const errorMsg = document.getElementById('loginError');
+            const errorDiv = document.getElementById('loginError');
+            const loginBtn = document.getElementById('loginBtn');
+
+            if (!username || !password) {
+                errorDiv.textContent = "Please enter both username and password.";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Show loading state
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="spinner"></span> Signing in...';
+            errorDiv.classList.add('hidden');
 
             try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
                 const response = await fetch(`${API_BASE}/admin/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username, password }),
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeout);
 
                 if (response.ok) {
                     const data = await response.json();
                     adminId = data.admin_id;
-                    document.getElementById('loginSection').classList.add('hidden');
-                    document.getElementById('dashboardSection').classList.remove('hidden');
-                    errorMsg.style.display = 'none';
+                    document.getElementById('adminName').textContent = data.username || username;
+
+                    // Smooth transition
+                    document.getElementById('loginSection').style.opacity = '0';
+                    document.getElementById('loginSection').style.transform = 'scale(0.95)';
+                    document.getElementById('loginSection').style.transition = 'all 0.3s ease';
+
+                    setTimeout(() => {
+                        document.getElementById('loginSection').classList.add('hidden');
+                        document.getElementById('dashboardSection').classList.remove('hidden');
+                    }, 300);
+
                 } else {
-                    errorMsg.textContent = "Invalid credentials";
-                    errorMsg.style.display = 'block';
+                    errorDiv.textContent = "Invalid username or password.";
+                    errorDiv.classList.remove('hidden');
+                    // Shake animation
+                    const card = document.querySelector('.login-card');
+                    card.style.animation = 'none';
+                    void card.offsetWidth;
+                    card.style.animation = 'shake 0.4s ease';
                 }
             } catch (error) {
-                console.error("Login error:", error);
-                errorMsg.textContent = "Server connection failed";
-                errorMsg.style.display = 'block';
+                if (error.name === 'AbortError') {
+                    errorDiv.textContent = "Request timed out. Server may be starting up — try again.";
+                } else {
+                    errorDiv.textContent = "Cannot connect to server. Please check if backend is running.";
+                }
+                errorDiv.classList.remove('hidden');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = 'Sign In';
             }
         }
 
+        // --- LOGOUT ---
         function logout() {
             location.reload();
         }
 
+        // --- FILE HANDLING with Drag & Drop ---
+        const dropZone = document.getElementById('fileDropZone');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--primary)';
+            dropZone.style.background = 'rgba(99, 102, 241, 0.08)';
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.style.borderColor = 'var(--border)';
+            dropZone.style.background = 'var(--bg-input)';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--border)';
+            dropZone.style.background = 'var(--bg-input)';
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('resumeFile').files = files;
+                handleFileSelect();
+            }
+        });
+
         async function handleFileSelect() {
             const fileInput = document.getElementById('resumeFile');
             const file = fileInput.files[0];
-            const status = document.getElementById('fileStatus');
+            const statusDiv = document.getElementById('fileStatus');
             const textArea = document.getElementById('resumeText');
+            const fileLabel = document.getElementById('fileLabel');
 
             if (!file) return;
 
-            status.textContent = "Parsing...";
-            textArea.value = "Parsing resume...";
+            fileLabel.innerHTML = `<span class="file-name">${file.name}</span>`;
+            statusDiv.innerHTML = '<span class="file-status loading">⏳ Parsing resume...</span>';
+            textArea.value = "";
 
             const formData = new FormData();
             formData.append('file', file);
@@ -258,32 +1112,30 @@
                 if (response.ok) {
                     const data = await response.json();
                     textArea.value = data.text;
-                    status.textContent = "Parsed successfully!";
-                    status.style.color = "var(--success-color)";
+                    statusDiv.innerHTML = '<span class="file-status success">✅ Parsed successfully</span>';
                 } else {
-                    textArea.value = "";
-                    status.textContent = "Error parsing file.";
-                    status.style.color = "var(--danger-color)";
+                    statusDiv.innerHTML = '<span class="file-status error">❌ Failed to parse file</span>';
                 }
             } catch (error) {
                 console.error(error);
-                status.textContent = "Error connecting to server.";
+                statusDiv.innerHTML = '<span class="file-status error">❌ Server connection error</span>';
             }
         }
 
+        // --- CREATE SESSION ---
         async function createSession() {
-            const name = document.getElementById('candidateName').value;
-            const resume = document.getElementById('resumeText').value;
-            const jd = document.getElementById('jobDescription').value;
+            const name = document.getElementById('candidateName').value.trim();
+            const resume = document.getElementById('resumeText').value.trim();
+            const jd = document.getElementById('jobDescription').value.trim();
             const createBtn = document.getElementById('createBtn');
 
             if (!name || !resume || !jd) {
-                alert("Please fill in all fields.");
+                showToast("Please fill in all fields.", "error");
                 return;
             }
 
             createBtn.disabled = true;
-            createBtn.textContent = "Generating...";
+            createBtn.innerHTML = '<span class="spinner"></span> Generating...';
 
             try {
                 const response = await fetch(`${API_BASE}/admin/create-session`, {
@@ -300,49 +1152,142 @@
                 if (response.ok) {
                     const data = await response.json();
                     addSessionToUI(name, data.link_url, data.link_id);
+
                     // Clear form
                     document.getElementById('candidateName').value = '';
                     document.getElementById('resumeFile').value = '';
                     document.getElementById('resumeText').value = '';
                     document.getElementById('jobDescription').value = '';
-                    document.getElementById('fileStatus').textContent = '';
+                    document.getElementById('fileLabel').textContent = 'Click to upload or drag and drop';
+                    document.getElementById('fileStatus').innerHTML = '';
+
+                    showToast(`Link created for ${name}!`, "success");
                 } else {
-                    alert("Failed to create session.");
+                    showToast("Failed to create session.", "error");
                 }
             } catch (error) {
                 console.error(error);
-                alert("Error creating session.");
+                showToast("Server connection failed.", "error");
             } finally {
                 createBtn.disabled = false;
-                createBtn.textContent = "Generate Link";
+                createBtn.innerHTML = '⚡ Generate Interview Link';
             }
         }
 
+        // --- ADD SESSION TO UI ---
         function addSessionToUI(name, relativeUrl, id) {
             const list = document.getElementById('linksList');
-            // Construct full URL based on current location
             const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/'));
             const fullUrl = `${baseUrl}/index.html${relativeUrl}`;
 
-            // Remove placeholder if exists
-            if (list.querySelector('p')) {
-                list.innerHTML = '';
-            }
+            // Remove empty state placeholder
+            const emptyState = list.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+
+            const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
             const item = document.createElement('div');
             item.className = 'session-item';
             item.innerHTML = `
-                <strong>Candidate: ${name}</strong>
-                <div style="font-family: monospace; background: #e5e7eb; padding: 0.5rem; word-break: break-all;">
-                    ${fullUrl}
+                <div class="session-item-header">
+                    <div class="candidate-name"><span class="dot"></span>${name}</div>
+                    <div class="timestamp">${now}</div>
                 </div>
-                <button class="btn copy-btn" onclick="navigator.clipboard.writeText('${fullUrl}').then(() => alert('Copied!'))">
-                    Copy Link
-                </button>
+                <div class="link-display">${fullUrl}</div>
+                <button class="btn-copy" onclick="copyLink(this, '${fullUrl}')">📋 Copy Link</button>
             `;
             list.prepend(item);
         }
+
+        // --- COPY LINK ---
+        function copyLink(btn, url) {
+            navigator.clipboard.writeText(url).then(() => {
+                btn.textContent = '✅ Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = '📋 Copy Link';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        // --- TOAST NOTIFICATIONS ---
+        function showToast(message, type = "success") {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `${type === 'success' ? '✅' : '❌'} ${message}`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(30px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // --- THEME TOGGLE ---
+        function initThemeIcon() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const icon = document.getElementById('themeIcon');
+            if (currentTheme === 'light') {
+                icon.textContent = '🌙';
+            } else {
+                icon.textContent = '☀️';
+            }
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            let newTheme = 'dark';
+
+            if (currentTheme !== 'light') {
+                newTheme = 'light';
+            }
+
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('adminTheme', newTheme);
+
+            const icon = document.getElementById('themeIcon');
+            icon.style.transform = 'scale(0) rotate(180deg)';
+
+            setTimeout(() => {
+                icon.textContent = newTheme === 'light' ? '🌙' : '☀️';
+                icon.style.transform = 'scale(1) rotate(0deg)';
+            }, 150);
+        }
+
+        // Set initial icon on load
+        document.addEventListener('DOMContentLoaded', initThemeIcon);
+
     </script>
+
+    <style>
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            20% {
+                transform: translateX(-8px);
+            }
+
+            40% {
+                transform: translateX(8px);
+            }
+
+            60% {
+                transform: translateX(-5px);
+            }
+
+            80% {
+                transform: translateX(5px);
+            }
+        }
+    </style>
 </body>
 
 </html>

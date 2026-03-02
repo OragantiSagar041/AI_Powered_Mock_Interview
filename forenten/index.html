@@ -424,16 +424,16 @@
 
                 <div class="question-display" style="display: flex; gap: 10px; align-items: flex-start;">
                     <p id="questionText" style="flex: 1; margin: 0;">Loading question...</p>
-                    <button id="readQuestionBtn" onclick="speakText(document.getElementById('questionText').innerText)"
-                        class="btn"
-                        style="background:none; border: 1px solid #ccc; color: #333; padding: 5px 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+                    <button id="toggleSpeechBtn" onclick="toggleSpeech()" class="btn"
+                        style="background:none; border: 1px solid #ccc; color: #333; padding: 5px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer;"
                         title="Read Question Aloud">
-                        🔊
-                    </button>
-                    <button id="stopReadQuestionBtn" onclick="stopSpeaking()" class="btn"
-                        style="background:none; border: 1px solid #ef4444; color: #ef4444; padding: 5px 10px; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; opacity: 0.5; cursor: pointer;"
-                        title="Stop Reading">
-                        🔇
+                        <svg id="speechIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                        </svg>
                     </button>
                 </div>
 
@@ -585,14 +585,30 @@
         // --- GLOBAL SPEECH SYNTHESIS CONTROL ---
         let isSpeaking = false;
 
+        function setToggleBtnState(speaking) {
+            const btn = document.getElementById('toggleSpeechBtn');
+            const icon = document.getElementById('speechIcon');
+            if (btn && icon) {
+                if (speaking) {
+                    btn.title = "Stop Reading";
+                    btn.style.color = '#ef4444';
+                    btn.style.borderColor = '#ef4444';
+                    icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line><line x1="19" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="19" y2="15"></line>';
+                } else {
+                    btn.title = "Read Question Aloud";
+                    btn.style.color = '#333';
+                    btn.style.borderColor = '#ccc';
+                    icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>';
+                }
+            }
+        }
+
         function speakText(text) {
             if ('speechSynthesis' in window) {
-                const readBtn = document.getElementById('readQuestionBtn');
-                const stopBtn = document.getElementById('stopReadQuestionBtn');
-
                 // Stop any previous speech
                 window.speechSynthesis.cancel();
                 isSpeaking = false;
+                setToggleBtnState(false);
 
                 if (!text) return;
 
@@ -601,44 +617,32 @@
                 const femaleVoice = voices.find(v => v.name.includes("Female") || v.name.includes("Google US English"));
                 if (femaleVoice) utterance.voice = femaleVoice;
 
-                // Track state
-                // Track state
                 utterance.onstart = () => {
                     isSpeaking = true;
-                    if (stopBtn) {
-                        stopBtn.style.opacity = "1";
-                        stopBtn.style.cursor = "pointer";
-                    }
+                    setToggleBtnState(true);
                 };
                 utterance.onend = () => {
                     isSpeaking = false;
-                    if (stopBtn) {
-                        stopBtn.style.opacity = "0.5";
-                        stopBtn.style.cursor = "default";
-                    }
+                    setToggleBtnState(false);
                 };
                 utterance.onerror = () => {
                     isSpeaking = false;
-                    if (stopBtn) {
-                        stopBtn.style.opacity = "0.5";
-                        stopBtn.style.cursor = "default";
-                    }
+                    setToggleBtnState(false);
                 };
-
 
                 window.speechSynthesis.speak(utterance);
             }
         }
 
-        function stopSpeaking() {
+        function toggleSpeech() {
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                isSpeaking = false;
-
-                const stopBtn = document.getElementById('stopReadQuestionBtn');
-                if (stopBtn) {
-                    stopBtn.style.opacity = "0.5";
-                    stopBtn.style.cursor = "default";
+                if (isSpeaking || window.speechSynthesis.speaking) {
+                    window.speechSynthesis.cancel();
+                    isSpeaking = false;
+                    setToggleBtnState(false);
+                } else {
+                    const text = document.getElementById('questionText').innerText;
+                    speakText(text);
                 }
             }
         }
